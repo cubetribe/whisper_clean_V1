@@ -10,7 +10,7 @@ This is a Whisper Transcription Tool - a modular Python application for audio/vi
 
 ### Fastest Way to Start the Application
 ```bash
-cd "/Users/denniswestermann/Desktop/Coding Projekte/whisper_clean"
+# From project root directory:
 source venv_new/bin/activate  # Use venv_new, NOT venv
 python -m src.whisper_transcription_tool.main web --port 8090
 ```
@@ -21,14 +21,14 @@ Then open http://localhost:8090 in your browser.
 
 1. **Permission Denied Error for whisper-cli:**
    ```bash
-   chmod +x "/Users/denniswestermann/Desktop/Coding Projekte/whisper_clean/deps/whisper.cpp/build/bin/whisper-cli"
+   chmod +x deps/whisper.cpp/build/bin/whisper-cli
    ```
 
 2. **Wrong paths in config:**
    The config file `~/.whisper_tool.json` should point to:
-   - whisper binary: `/Users/denniswestermann/Desktop/Coding Projekte/whisper_clean/deps/whisper.cpp/build/bin/whisper-cli`
-   - models: `/Users/denniswestermann/Desktop/Coding Projekte/whisper_clean/models`
-   - transcriptions: `/Users/denniswestermann/Desktop/Coding Projekte/whisper_clean/transcriptions`
+   - whisper binary: `[project_root]/deps/whisper.cpp/build/bin/whisper-cli`
+   - models: `[project_root]/models`
+   - transcriptions: `[project_root]/transcriptions`
 
 3. **Virtual Environment:**
    - Primary: `venv_new` (preferred)
@@ -139,9 +139,9 @@ The application follows a modular architecture with these main components:
 
 ## Path Migration Notes
 
-All paths have been migrated from Google Drive to local:
-- OLD: `/Users/denniswestermann/Library/CloudStorage/GoogleDrive-cubetribe@googlemail.com/...`
-- NEW: `/Users/denniswestermann/Desktop/Coding Projekte/whisper_clean/...`
+All paths have been migrated from cloud storage to local:
+- OLD: `~/Library/CloudStorage/GoogleDrive-[email]/...`
+- NEW: `/path/to/whisper_clean/...`
 
 Files that were updated:
 1. `~/.whisper_tool.json` - Configuration file with all paths

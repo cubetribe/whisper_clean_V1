@@ -11,14 +11,14 @@ Ein modulares Python-Tool zur Transkription und Auswertung von Audio- und Videod
 
 ### Direkte Ausführung (empfohlen)
 ```bash
-cd "/Users/denniswestermann/Desktop/Coding Projekte/whisper_clean"
+# Im Projektverzeichnis:
 source venv_new/bin/activate
 python -m src.whisper_transcription_tool.main web --port 8090
 ```
 
 ### Mit Startskript
 ```bash
-cd "/Users/denniswestermann/Desktop/Coding Projekte/whisper_clean"
+# Im Projektverzeichnis:
 ./scripts/start_server.sh
 ```
 
