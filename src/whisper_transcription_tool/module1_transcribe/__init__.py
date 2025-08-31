@@ -71,6 +71,7 @@ from ..core.events import publish, EventType
 from ..core.utils import ensure_directory_exists
 from ..core.constants import WHISPER_CPP_MODELS_URL
 from ..core.exceptions import DependencyError, ModelError
+from ..core.audio_chunker import AudioChunker, is_audio_chunkable
 
 from ..core.logging_setup import get_logger
 from ..core.models import OutputFormat, TranscriptionRequest, TranscriptionResult, WhisperModel
@@ -360,6 +361,23 @@ def transcribe_audio(
         error_msg = f"Audio file not found: {audio_path}"
         logger.error(error_msg)
         return TranscriptionResult(success=False, error=error_msg)
+    
+    # Check if file should be chunked for processing
+    chunking_enabled = config.get("chunking", {}).get("enabled", True)
+    if chunking_enabled and is_audio_chunkable(audio_path, config):
+        logger.info(f"Audio file is large, will process in chunks")
+        return transcribe_audio_chunked(
+            audio_path=audio_path,
+            output_format=output_format,
+            language=language,
+            model=model,
+            output_path=output_path,
+            output_dir=output_dir,
+            srt_max_chars=srt_max_chars,
+            srt_max_duration=srt_max_duration,
+            srt_linebreaks=srt_linebreaks,
+            config=config
+        )
     
     # Generate output path if not provided
     if output_path is None:
@@ -669,5 +687,188 @@ def transcribe_audio(
             "error": error_msg
         })
         return TranscriptionResult(success=False, error=error_msg)
+
+
+def transcribe_audio_chunked(
+    audio_path: Union[str, Path],
+    output_format: Union[str, OutputFormat] = OutputFormat.TXT,
+    language: Optional[str] = None,
+    model: Union[str, WhisperModel] = DEFAULT_MODEL,
+    output_path: Optional[Union[str, Path]] = None,
+    output_dir: Optional[Union[str, Path]] = None,
+    srt_max_chars: Optional[int] = None,
+    srt_max_duration: Optional[float] = None,
+    srt_linebreaks: bool = True,
+    config: Optional[Dict] = None
+) -> TranscriptionResult:
+    """
+    Transcribe a large audio file by splitting it into chunks.
+    
+    Args:
+        Same as transcribe_audio
+        
+    Returns:
+        TranscriptionResult object
+    """
+    # Load config if not provided
+    if config is None:
+        config = load_config()
+    
+    # Convert string parameters to enums if needed
+    if isinstance(output_format, str):
+        output_format = OutputFormat(output_format)
+    
+    if isinstance(model, str):
+        model = WhisperModel(model)
+    
+    audio_path = str(audio_path)
+    chunker = AudioChunker(config)
+    
+    try:
+        # Split audio into chunks
+        logger.info(f"Splitting large audio file into chunks...")
+        publish(EventType.CUSTOM, {
+            "type": "CHUNKING_STARTED",
+            "audio_path": audio_path
+        })
+        
+        chunks = chunker.split_audio(audio_path)
+        logger.info(f"Created {len(chunks)} chunks for processing")
+        
+        # Transcribe each chunk
+        chunk_transcriptions = []
+        all_segments = []
+        
+        for i, chunk_info in enumerate(chunks):
+            chunk_num = i + 1
+            logger.info(f"Processing chunk {chunk_num}/{len(chunks)}: {chunk_info['filename']}")
+            
+            publish(EventType.CUSTOM, {
+                "type": "CHUNK_STARTED",
+                "chunk": chunk_num,
+                "total": len(chunks),
+                "filename": chunk_info['filename']
+            })
+            
+            # Transcribe chunk (recursive call without chunking)
+            chunk_config = config.copy()
+            chunk_config["chunking"]["enabled"] = False  # Disable chunking for individual chunks
+            
+            chunk_result = transcribe_audio(
+                audio_path=chunk_info['path'],
+                output_format=OutputFormat.JSON,  # Get JSON for segment timing
+                language=language,
+                model=model,
+                config=chunk_config
+            )
+            
+            if not chunk_result.success:
+                logger.error(f"Failed to transcribe chunk {chunk_num}: {chunk_result.error}")
+                publish(EventType.CUSTOM, {
+                    "type": "CHUNK_FAILED",
+                    "chunk": chunk_num,
+                    "error": chunk_result.error
+                })
+                # Continue with other chunks even if one fails
+                continue
+            
+            # Adjust timestamps for chunk position
+            chunk_start_time = chunk_info['start_time']
+            if chunk_result.segments:
+                adjusted_segments = []
+                for segment in chunk_result.segments:
+                    adjusted_segment = segment.copy()
+                    adjusted_segment['start'] = segment.get('start', 0) + chunk_start_time
+                    adjusted_segment['end'] = segment.get('end', 0) + chunk_start_time
+                    adjusted_segments.append(adjusted_segment)
+                all_segments.extend(adjusted_segments)
+            
+            chunk_transcriptions.append({
+                "chunk": chunk_num,
+                "text": chunk_result.text,
+                "start_time": chunk_start_time
+            })
+            
+            publish(EventType.CUSTOM, {
+                "type": "CHUNK_COMPLETED",
+                "chunk": chunk_num,
+                "total": len(chunks),
+                "progress": (chunk_num / len(chunks)) * 100
+            })
+        
+        # Merge transcriptions
+        logger.info("Merging chunk transcriptions...")
+        merged_text = chunker.merge_transcriptions(chunk_transcriptions, remove_overlap=True)
+        
+        # Generate output path if not provided
+        if output_path is None:
+            output_directory = output_dir if output_dir else config["output"]["default_directory"]
+            output_path = get_output_path(audio_path, output_directory, output_format.value)
+        else:
+            output_path = str(output_path)
+        
+        # Ensure output directory exists
+        ensure_directory_exists(os.path.dirname(output_path))
+        
+        # Save output in requested format
+        if output_format == OutputFormat.TXT:
+            with open(output_path, "w", encoding="utf-8") as f:
+                f.write(merged_text)
+        elif output_format == OutputFormat.SRT:
+            if all_segments:
+                srt_content = segments_to_srt(all_segments, max_chars=srt_max_chars, 
+                                             max_duration=srt_max_duration, linebreaks=srt_linebreaks)
+            else:
+                srt_content = text_to_srt(merged_text, max_chars=srt_max_chars, 
+                                        max_duration=srt_max_duration, linebreaks=srt_linebreaks)
+            with open(output_path, "w", encoding="utf-8") as f:
+                f.write(srt_content)
+        elif output_format == OutputFormat.VTT:
+            with open(output_path, "w", encoding="utf-8") as f:
+                f.write("WEBVTT\n\n00:00:00.000 --> 00:05:00.000\n" + merged_text + "\n\n")
+        elif output_format == OutputFormat.JSON:
+            output_data = {
+                "text": merged_text,
+                "segments": all_segments,
+                "chunks": len(chunks)
+            }
+            with open(output_path, "w", encoding="utf-8") as f:
+                json.dump(output_data, f, ensure_ascii=False, indent=2)
+        
+        # Clean up chunks
+        chunk_dir = os.path.dirname(chunks[0]['path']) if chunks else None
+        if chunk_dir:
+            chunker.cleanup_chunks(chunk_dir)
+        
+        logger.info(f"Successfully transcribed {len(chunks)} chunks")
+        
+        publish(EventType.TRANSCRIPTION_COMPLETED, {
+            "audio_path": audio_path,
+            "output_path": output_path,
+            "chunks": len(chunks),
+            "text": merged_text
+        })
+        
+        return TranscriptionResult(
+            success=True,
+            text=merged_text,
+            output_file=output_path,
+            segments=all_segments,
+            metadata={
+                "chunks": len(chunks),
+                "model": model.value,
+                "language": language
+            }
+        )
+        
+    except Exception as e:
+        error_msg = f"Error in chunked transcription: {str(e)}"
+        logger.error(error_msg)
+        publish(EventType.TRANSCRIPTION_FAILED, {
+            "audio_path": audio_path,
+            "error": error_msg
+        })
+        return TranscriptionResult(success=False, error=error_msg)
+
 
 # Removed parse_args and main CLI logic from this module (moved to main.py)

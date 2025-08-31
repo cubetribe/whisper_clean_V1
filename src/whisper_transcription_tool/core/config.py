@@ -40,7 +40,7 @@ DEFAULT_CONFIG = {
         "threads": 4,
     },
     "ffmpeg": {
-        "binary_path": "/usr/local/bin/ffmpeg",
+        "binary_path": "/opt/homebrew/bin/ffmpeg",
         "audio_format": "wav",
         "sample_rate": 16000,
     },
@@ -48,6 +48,13 @@ DEFAULT_CONFIG = {
         "default_directory": os.path.join(PROJECT_ROOT, "transcriptions"),
         "temp_directory": os.path.join(PROJECT_ROOT, "transcriptions", "temp"),
         "default_format": "txt",
+    },
+    "chunking": {
+        "enabled": True,
+        "max_duration_minutes": 20,
+        "overlap_seconds": 10,
+        "auto_detect_threshold": 20,  # Auto-enable for files > 20 minutes
+        "format": "wav"
     },
     "chatbot": {
         "mode": "local",

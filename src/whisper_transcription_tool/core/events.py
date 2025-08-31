@@ -27,6 +27,7 @@ class EventType(Enum):
     MODEL_DOWNLOAD_COMPLETED = auto()
     MODEL_DOWNLOAD_FAILED = auto()
     PROGRESS_UPDATE = auto()
+    CUSTOM = auto()  # For custom events like chunking
 
 
 class Event:
