@@ -116,6 +116,71 @@ document.addEventListener('DOMContentLoaded', function() {
     const browseButton = document.getElementById('browse-button');
     const outputPathInput = document.getElementById('output-path');
     
+    // WebSocket für Progress-Updates
+    let ws = null;
+    let reconnectInterval = null;
+    
+    function connectWebSocket() {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${protocol}//${window.location.host}/ws/progress`;
+        
+        ws = new WebSocket(wsUrl);
+        
+        ws.onopen = function() {
+            console.log('WebSocket connected for progress updates');
+            if (reconnectInterval) {
+                clearInterval(reconnectInterval);
+                reconnectInterval = null;
+            }
+        };
+        
+        ws.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            console.log('Progress update received:', data);
+            
+            if (data.task === 'transcription') {
+                // Update progress bar
+                if (data.progress !== undefined) {
+                    progressBar.style.width = data.progress + '%';
+                }
+                
+                // Update status text
+                if (data.status) {
+                    transcriptionResult.innerHTML = `
+                        <div class="status-update">
+                            <i class="fas fa-spinner fa-spin"></i> ${data.status}
+                            ${data.chunk_current ? ` (Segment ${data.chunk_current}/${data.chunk_total})` : ''}
+                        </div>
+                    `;
+                }
+                
+                // Handle completion
+                if (data.phase === 'completed') {
+                    progressBar.style.width = '100%';
+                    progressBar.classList.add('complete');
+                }
+            }
+        };
+        
+        ws.onerror = function(error) {
+            console.error('WebSocket error:', error);
+        };
+        
+        ws.onclose = function() {
+            console.log('WebSocket disconnected');
+            // Try to reconnect after 3 seconds
+            if (!reconnectInterval) {
+                reconnectInterval = setInterval(() => {
+                    console.log('Attempting to reconnect WebSocket...');
+                    connectWebSocket();
+                }, 3000);
+            }
+        };
+    }
+    
+    // Connect WebSocket on page load
+    connectWebSocket();
+    
     // Event-Listener für SRT-Schieberegler
     srtMaxDurationSlider.addEventListener('input', function() {
         srtMaxDurationValue.textContent = this.value;
@@ -653,7 +718,31 @@ document.addEventListener('DOMContentLoaded', function() {
         resultContainer.style.display = 'block';
         progressContainer.style.display = 'block';
         progressBar.style.width = '0%';
-        transcriptionResult.innerHTML = '<p>Transkription wird gestartet...</p>';
+        transcriptionResult.innerHTML = `
+            <div class="status-update">
+                <i class="fas fa-spinner fa-spin"></i> Transkription läuft...
+                <button id="cancel-button" class="btn btn-danger btn-sm ml-3" style="margin-left: 1rem;">
+                    <i class="fas fa-stop"></i> Abbrechen
+                </button>
+            </div>
+        `;
+        
+        // Cancel button handler
+        setTimeout(() => {
+            const cancelButton = document.getElementById('cancel-button');
+            if (cancelButton) {
+                cancelButton.addEventListener('click', function() {
+                    if (confirm('Möchten Sie die Transkription wirklich abbrechen?')) {
+                        fetch('/api/cancel', { method: 'POST' })
+                            .then(response => response.json())
+                            .then(data => {
+                                transcriptionResult.innerHTML = '<p class="text-warning">Transkription wurde abgebrochen.</p>';
+                                progressContainer.style.display = 'none';
+                            });
+                    }
+                });
+            }
+        }, 100);
         downloadButton.style.display = 'none';
         
         // Transkription starten

@@ -405,8 +405,10 @@ def transcribe_audio(
     # Sende initiale Status-Nachricht
     publish(EventType.PROGRESS_UPDATE, {
         'task': 'transcription',
-        'status': 'Bereite Transkription vor...',
-        'user_id': transcription_id
+        'status': 'Initialisiere Transkription...',
+        'progress': 0,
+        'user_id': transcription_id,
+        'phase': 'initialization'
     })
     
     # Check if file should be chunked for processing
@@ -416,7 +418,9 @@ def transcribe_audio(
     publish(EventType.PROGRESS_UPDATE, {
         'task': 'transcription',
         'status': 'Analysiere Audio-Datei...',
-        'user_id': transcription_id
+        'progress': 2,
+        'user_id': transcription_id,
+        'phase': 'analyzing'
     })
     
     if chunking_enabled and is_audio_chunkable(audio_path, config):
@@ -637,16 +641,20 @@ def transcribe_audio(
                 stdout_line = process.stdout.readline()
                 if stdout_line:
                     stdout.append(stdout_line)
+                    # Debug-Ausgabe im Terminal anzeigen
+                    print(f"[WHISPER PROGRESS] {stdout_line.strip()}", flush=True)
                     logger.debug(f"Whisper stdout: {stdout_line.strip()}")
                     
                     # Fortschritt erkennen und Event veru00f6ffentlichen
                     match = progress_pattern.search(stdout_line)
                     if match:
                         progress = int(match.group(2))
-                        # Fortschrittsereignis veru00f6ffentlichen
+                        # Terminal-Ausgabe für Progress
+                        print(f"[PROGRESS UPDATE] Transkription bei {progress}%", flush=True)                        # Fortschrittsereignis veru00f6ffentlichen
                         publish(EventType.PROGRESS_UPDATE, {
                             'task': 'transcription',
                             'progress': progress,
+                            'status': f'Transkribiere... {progress}%',
                             'audio_path': audio_path,
                             'user_id': transcription_id  # ID zur Identifizierung des Clients
                         })
@@ -683,13 +691,24 @@ def transcribe_audio(
             logger.info(f"Command stderr: {stderr_text[:500]}...")
             
             # Abschluss-Fortschritt senden
-            publish(EventType.PROGRESS_UPDATE, {
-                'task': 'transcription',
-                'progress': 100,
-                'audio_path': audio_path,
-                'status': 'completed' if returncode == 0 else 'failed',
-                'user_id': transcription_id
-            })
+            if returncode == 0:
+                publish(EventType.PROGRESS_UPDATE, {
+                    'task': 'transcription',
+                    'progress': 95,
+                    'status': 'Verarbeite Transkriptionsergebnis...',
+                    'audio_path': audio_path,
+                    'user_id': transcription_id,
+                    'phase': 'post_processing'
+                })
+            else:
+                publish(EventType.PROGRESS_UPDATE, {
+                    'task': 'transcription',
+                    'progress': 0,
+                    'status': 'Transkription fehlgeschlagen',
+                    'audio_path': audio_path,
+                    'user_id': transcription_id,
+                    'phase': 'failed'
+                })
             
             if returncode != 0:
                 error_msg = f"Whisper.cpp failed with return code {returncode}: {stderr}"
@@ -748,6 +767,16 @@ def transcribe_audio(
                 }
                 with open(output_path, "w", encoding="utf-8") as f:
                     json.dump(json_data, f, indent=2)
+            
+            # Send final progress update
+            publish(EventType.PROGRESS_UPDATE, {
+                'task': 'transcription',
+                'progress': 100,
+                'status': 'Transkription abgeschlossen',
+                'audio_path': audio_path,
+                'user_id': transcription_id,
+                'phase': 'completed'
+            })
             
             # Publish success event
             publish(EventType.TRANSCRIPTION_COMPLETED, {
@@ -881,28 +910,18 @@ def transcribe_audio_chunked(
             chunk_num = i + 1
             logger.info(f"Processing chunk {chunk_num}/{len(chunks)}: {chunk_info['filename']}")
             
-            # Status für Modell-Laden
+            # Calculate overall progress for chunks
+            base_progress = (i / len(chunks)) * 90  # 0-90% for chunks, 90-100% for merging
+            
+            # Status update for current chunk
             publish(EventType.PROGRESS_UPDATE, {
                 'task': 'transcription',
-                'status': f'Lade Modell {model.value} für Segment {chunk_num}/{len(chunks)}...',
-                'user_id': transcription_id
-            })
-            
-            # Detaillierte Progress-Updates für Chunks
-            publish(EventType.PROGRESS_UPDATE, {
-                "task": "transcription",
-                "chunk_index": i,
-                "total_chunks": len(chunks),
-                "status": f"Transkribiere Segment {chunk_num} von {len(chunks)}...",
-                "chunk_filename": chunk_info['filename'],
-                "progress": (i / len(chunks)) * 100,
-                "user_id": transcription_id
-            })
-            
-            publish(EventType.PROGRESS_UPDATE, {
-                'task': 'transcription',
-                'status': f'Transkription läuft für Segment {chunk_num}/{len(chunks)} (ca. 20 Minuten Audio)...',
-                'user_id': transcription_id
+                'status': f'Verarbeite Segment {chunk_num}/{len(chunks)}...',
+                'progress': base_progress,
+                'user_id': transcription_id,
+                'phase': 'chunk_processing',
+                'chunk_current': chunk_num,
+                'chunk_total': len(chunks)
             })
             
             publish(EventType.CUSTOM, {

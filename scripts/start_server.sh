@@ -14,13 +14,15 @@ echo -e "${BLUE}=========================================================${NC}"
 
 # Aktuelles Verzeichnis feststellen (wo das Skript liegt)
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-cd "$SCRIPT_DIR"
+# Gehe zum Hauptverzeichnis (eine Ebene höher)
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+cd "$PROJECT_DIR"
 
 # Setze die DYLD_LIBRARY_PATH Umgebungsvariable für dynamische Bibliotheken
 echo -e "${YELLOW}Konfiguriere Bibliothekspfade...${NC}"
 
 # Stelle sicher, dass wir die dyn. Bibliotheken im neuen Pfad finden können
-export DYLD_LIBRARY_PATH="$SCRIPT_DIR/deps/whisper.cpp/build/src:$SCRIPT_DIR/deps/whisper.cpp/build/ggml/src:$SCRIPT_DIR/deps/whisper.cpp/build/ggml/src/ggml-blas:$SCRIPT_DIR/deps/whisper.cpp/build/ggml/src/ggml-metal:$DYLD_LIBRARY_PATH"
+export DYLD_LIBRARY_PATH="$PROJECT_DIR/deps/whisper.cpp/build/src:$PROJECT_DIR/deps/whisper.cpp/build/ggml/src:$PROJECT_DIR/deps/whisper.cpp/build/ggml/src/ggml-blas:$PROJECT_DIR/deps/whisper.cpp/build/ggml/src/ggml-metal:$DYLD_LIBRARY_PATH"
 
 # Workaround entfernt - nicht mehr benötigt da lokale Pfade verwendet werden
 
@@ -147,21 +149,21 @@ if [ ! -f "$HOME/.whisper_tool.json" ]; then
         cat > "$HOME/.whisper_tool.json" << EOL
 {
     "whisper": {
-        "binary_path": "$SCRIPT_DIR/deps/whisper.cpp/build/bin/whisper-cli",
-        "model_path": "$SCRIPT_DIR/models",
+        "binary_path": "$PROJECT_DIR/deps/whisper.cpp/build/bin/whisper-cli",
+        "model_path": "$PROJECT_DIR/models",
         "threads": 4
     },
     "output": {
-        "default_directory": "$SCRIPT_DIR/transcriptions",
-        "temp_directory": "$SCRIPT_DIR/transcriptions/temp"
+        "default_directory": "$PROJECT_DIR/transcriptions",
+        "temp_directory": "$PROJECT_DIR/transcriptions/temp"
     },
     "ffmpeg": {
         "binary_path": "/usr/local/bin/ffmpeg"
     }
 }
 EOL
-        mkdir -p "$SCRIPT_DIR/models"
-        mkdir -p "$SCRIPT_DIR/transcriptions/temp"
+        mkdir -p "$PROJECT_DIR/models"
+        mkdir -p "$PROJECT_DIR/transcriptions/temp"
         echo -e "${GREEN}Standard-Konfigurationsdatei erstellt.${NC}"
     else
         echo -e "${RED}Ohne Konfigurationsdatei kann das Tool nicht gestartet werden.${NC}"

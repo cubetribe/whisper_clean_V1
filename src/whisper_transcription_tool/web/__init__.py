@@ -70,14 +70,15 @@ async def progress_event_handler(event: Event):
     
     try:
         if event.event_type == EventType.PROGRESS_UPDATE:
-            logger.info(f"PROGRESS_HANDLER: Progress event received: Status={event.data.get('status')}, Progress={event.data.get('progress')}%")
+            # Log the received event
+            status = event.data.get('status', '')
+            progress = event.data.get('progress', 0)
+            task = event.data.get('task', 'unknown')
             
-            # Stelle sicher, dass alle benötigten Felder vorhanden sind
-            required_fields = ['model_name', 'status', 'progress', 'downloaded_mb', 'total_size_mb', 'speed_mbps']
-            for field in required_fields:
-                if field not in event.data:
-                    logger.warning(f"PROGRESS_HANDLER: Missing required field '{field}' in event data")
-                    event.data[field] = 0 if field != 'model_name' and field != 'status' else 'unknown'
+            logger.info(f"PROGRESS_HANDLER: {task} event - Status: {status}, Progress: {progress}%")
+            
+            # Don't require specific fields - just pass the event data through
+            # The frontend will handle different event types appropriately
             
             # Speichere die letzte Fortschrittsmeldung für neu verbundene Clients
             last_progress_data = event.data.copy()
@@ -100,6 +101,7 @@ async def progress_event_handler(event: Event):
             for ws in current_sockets:
                 try:
                     await ws.send_text(message)
+                    logger.debug(f"Successfully sent: {message[:100]}...")
                 except Exception as e:
                     logger.error(f"Failed to send progress to WebSocket: {e}")
                     try:
