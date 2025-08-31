@@ -137,16 +137,17 @@ The application follows a modular architecture with these main components:
 - WebSocket events are used for real-time progress updates during transcription
 - The start_server.sh script handles port conflicts and manages running instances
 
-## Path Migration Notes
+## Version & License
 
-All paths have been migrated from cloud storage to local:
-- OLD: `~/Library/CloudStorage/GoogleDrive-[email]/...`
-- NEW: `/path/to/whisper_clean/...`
+- **Current Version**: 0.9.5
+- **License**: Free to Use (Copyright © 2025 Dennis Westermann - aiEX Academy)
+- **Website**: www.goaiex.com
+- **Repository**: https://github.com/cubetribe/Whisper-Transcription-Tool
 
-Files that were updated:
-1. `~/.whisper_tool.json` - Configuration file with all paths
-2. `src/whisper_transcription_tool/module1_transcribe/__init__.py` - Removed old symlink workaround
-3. `start_server.sh` - Updated to use local paths and check for venv_new
-4. `Whisper Transkriptionstool.command` - Updated path
-5. `Whisper Transkriptionstool.applescript` - Updated path
-6. `restore_backup.sh` - Updated backup paths
+## Recent Updates (v0.9.5)
+
+- New clean repository without personal data in history
+- Updated license from MIT to Free to Use
+- Comprehensive documentation and README
+- Security improvements (removed personal paths)
+- All scripts use relative paths for portability
