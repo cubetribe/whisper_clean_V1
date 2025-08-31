@@ -87,6 +87,20 @@
             <div class="progress-bar" id="progress-bar"></div>
         </div>
         <div id="transcription-result"></div>
+        
+        <!-- Terminal Output Container -->
+        <div class="terminal-container" id="terminal-container" style="display: none;">
+            <div class="terminal-header">
+                <i class="fas fa-terminal"></i> Debug Output
+                <button class="terminal-toggle" id="terminal-toggle" title="Toggle terminal">
+                    <i class="fas fa-chevron-down"></i>
+                </button>
+            </div>
+            <div class="terminal-output" id="terminal-output">
+                <!-- Terminal messages will be added here -->
+            </div>
+        </div>
+        
         <button class="button" id="download-button" style="display: none;">
             <i class="fas fa-download"></i> Herunterladen
         </button>
@@ -115,6 +129,11 @@ document.addEventListener('DOMContentLoaded', function() {
     const srtMaxCharsValue = document.getElementById('srt-max-chars-value');
     const browseButton = document.getElementById('browse-button');
     const outputPathInput = document.getElementById('output-path');
+    
+    // Terminal Output Elements
+    const terminalContainer = document.getElementById('terminal-container');
+    const terminalOutput = document.getElementById('terminal-output');
+    const terminalToggle = document.getElementById('terminal-toggle');
     
     // WebSocket für Progress-Updates
     let ws = null;
@@ -154,6 +173,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     `;
                 }
                 
+                // Handle terminal output
+                if (data.terminal_output) {
+                    addTerminalMessage(data.terminal_output);
+                }
+                
                 // Handle completion
                 if (data.phase === 'completed') {
                     progressBar.style.width = '100%';
@@ -180,6 +204,55 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Connect WebSocket on page load
     connectWebSocket();
+    
+    // Terminal output functions
+    function addTerminalMessage(message) {
+        if (!terminalContainer || !terminalOutput) return;
+        
+        // Show terminal container
+        terminalContainer.style.display = 'block';
+        
+        // Create new terminal line
+        const line = document.createElement('div');
+        line.className = 'terminal-line';
+        line.textContent = message;
+        
+        // Add timestamp
+        const timestamp = new Date().toLocaleTimeString();
+        const timestampSpan = document.createElement('span');
+        timestampSpan.className = 'terminal-timestamp';
+        timestampSpan.textContent = `[${timestamp}] `;
+        line.prepend(timestampSpan);
+        
+        // Add to terminal output
+        terminalOutput.appendChild(line);
+        
+        // Auto-scroll to bottom
+        terminalOutput.scrollTop = terminalOutput.scrollHeight;
+        
+        // Limit terminal lines to prevent memory issues
+        while (terminalOutput.children.length > 500) {
+            terminalOutput.removeChild(terminalOutput.firstChild);
+        }
+    }
+    
+    function clearTerminal() {
+        if (terminalOutput) {
+            terminalOutput.innerHTML = '';
+        }
+    }
+    
+    // Terminal toggle functionality
+    if (terminalToggle) {
+        terminalToggle.addEventListener('click', function() {
+            terminalOutput.style.display = terminalOutput.style.display === 'none' ? 'block' : 'none';
+            const icon = this.querySelector('i');
+            if (icon) {
+                icon.className = terminalOutput.style.display === 'none' ? 
+                    'fas fa-chevron-right' : 'fas fa-chevron-down';
+            }
+        });
+    }
     
     // Event-Listener für SRT-Schieberegler
     srtMaxDurationSlider.addEventListener('input', function() {
@@ -718,6 +791,7 @@ document.addEventListener('DOMContentLoaded', function() {
         resultContainer.style.display = 'block';
         progressContainer.style.display = 'block';
         progressBar.style.width = '0%';
+        clearTerminal(); // Clear terminal output when starting new transcription
         transcriptionResult.innerHTML = `
             <div class="status-update">
                 <i class="fas fa-spinner fa-spin"></i> Transkription läuft...

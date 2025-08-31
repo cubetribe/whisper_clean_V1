@@ -642,8 +642,16 @@ def transcribe_audio(
                 if stdout_line:
                     stdout.append(stdout_line)
                     # Debug-Ausgabe im Terminal anzeigen
-                    print(f"[WHISPER PROGRESS] {stdout_line.strip()}", flush=True)
+                    terminal_msg = f"[WHISPER PROGRESS] {stdout_line.strip()}"
+                    print(terminal_msg, flush=True)
                     logger.debug(f"Whisper stdout: {stdout_line.strip()}")
+                    
+                    # Terminal output über WebSocket senden
+                    publish(EventType.PROGRESS_UPDATE, {
+                        'task': 'transcription',
+                        'terminal_output': terminal_msg,
+                        'user_id': transcription_id
+                    })
                     
                     # Fortschritt erkennen und Event veru00f6ffentlichen
                     match = progress_pattern.search(stdout_line)
@@ -655,6 +663,7 @@ def transcribe_audio(
                             'task': 'transcription',
                             'progress': progress,
                             'status': f'Transkribiere... {progress}%',
+                            'terminal_output': f"[PROGRESS UPDATE] Transkription bei {progress}%",
                             'audio_path': audio_path,
                             'user_id': transcription_id  # ID zur Identifizierung des Clients
                         })
