@@ -2,6 +2,34 @@
 
 Ein modulares Python-Tool zur Transkription und Auswertung von Audio- und Videodaten mit Whisper.cpp, vollständig portabel und plattformunabhängig mit automatischer Audioextraktion.
 
+## 🚀 Schnellstart
+
+### Option 1: Verwendung der neuen virtuellen Umgebung (empfohlen)
+```bash
+cd "/Users/denniswestermann/Desktop/Coding Projekte/whisper_clean"
+source venv_new/bin/activate
+python -m src.whisper_transcription_tool.main web --port 8090
+```
+
+### Option 2: Verwendung des Start-Skripts
+```bash
+cd "/Users/denniswestermann/Desktop/Coding Projekte/whisper_clean"
+./start_server.sh
+```
+
+### Option 3: Doppelklick auf Launcher
+- **QuickLauncher.command** - Startet die Anwendung mit automatischer Pfaderkennung
+- **Whisper Transkriptionstool.command** - Alternative Startmethode
+
+## ⚠️ Wichtige Hinweise
+
+- **Projektpfad:** `/Users/denniswestermann/Desktop/Coding Projekte/whisper_clean`
+- **Virtuelle Umgebung:** Verwendet `venv_new` (oder `venv` als Fallback)
+- **Konfiguration:** Liegt in `~/.whisper_tool.json`
+- **Whisper Binary:** `deps/whisper.cpp/build/bin/whisper-cli` (muss ausführbar sein: `chmod +x`)
+- **Modelle:** Werden im Verzeichnis `models/` gespeichert
+- **Transkriptionen:** Werden in `transcriptions/` gespeichert
+
 ## Übersicht
 
 ---
@@ -149,25 +177,41 @@ Das Projekt ist in vier Hauptmodule unterteilt und unterstützt dank der dynamis
 - macOS mit Apple Silicon (M1, M2, M3, M4)
 - Python 3.11 oder höher
 - FFmpeg (für Videoextraktion)
-- Whisper.cpp (wird automatisch heruntergeladen und kompiliert)
+- Whisper.cpp (bereits im Projekt enthalten)
 
-### Installation über pip
+### Schnellinstallation für bestehende Installation
 
 ```bash
-pip install whisper-transcription-tool
+# 1. Zum Projektverzeichnis wechseln
+cd "/Users/denniswestermann/Desktop/Coding Projekte/whisper_clean"
+
+# 2. Neue virtuelle Umgebung erstellen (falls nicht vorhanden)
+python3 -m venv venv_new
+
+# 3. Virtuelle Umgebung aktivieren
+source venv_new/bin/activate
+
+# 4. Abhängigkeiten installieren
+pip install -r requirements.txt
+
+# 5. App im Entwicklungsmodus installieren
+pip install -e .
+
+# 6. Whisper-CLI ausführbar machen
+chmod +x deps/whisper.cpp/build/bin/whisper-cli
+
+# 7. Server starten
+python -m src.whisper_transcription_tool.main web --port 8090
 ```
 
-### Installation aus dem Quellcode
+### Vollständige Neuinstallation
 
 ```bash
+# Repository klonen (falls noch nicht vorhanden)
 git clone https://github.com/yourusername/whisper_transcription_tool.git
 cd whisper_transcription_tool
-pip install -e .
-```
 
-### Installation über das Setup-Skript
-
-```bash
+# Installation über das Setup-Skript
 bash install.sh
 ```
 
@@ -197,12 +241,18 @@ Für Entwickler:
 pip install "whisper-transcription-tool[dev]"
 ```
 
-## Schnellstart
+## Verwendung
 
-### Transkription einer Audiodatei
+### Web-Interface (empfohlen)
+
+Nach dem Start ist die Web-Oberfläche unter http://localhost:8090 verfügbar.
+
+### Kommandozeile
+
+#### Transkription einer Audiodatei
 
 ```bash
-whisper-tool transcribe path/to/audio.mp3 --model medium
+whisper-tool transcribe path/to/audio.mp3 --model large-v3-turbo
 ```
 
 ### Extraktion und Transkription eines Videos

@@ -54,13 +54,17 @@ recordings/
 *.log
 *.tmp
 
-# Temporary files
-transcriptions/temp/
+# Temporary files - CRITICAL: Keep temp files out of git
+transcriptions/temp/*
+!transcriptions/temp/.gitkeep
 *.wav
 *.mp3
 *.mp4
 *.mov
 *.avi
+*.m4a
+*.flac
+*.ogg
 
 # Backups
 Backups/
