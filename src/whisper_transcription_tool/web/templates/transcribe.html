@@ -1,0 +1,784 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="transcribe-section">
+    <div class="upload-container">
+        <form id="transcribe-form" enctype="multipart/form-data">
+            <div class="form-group">
+                <label for="audio-file">Audio- oder Videodatei(en) auswählen:</label>
+                <input type="file" id="audio-file" name="audio_file" accept="audio/*,video/mp4,video/x-m4v,video/quicktime,video/webm,video/mpeg,video/x-msvideo,video/x-matroska" multiple required>
+                <small>Unterstützte Formate: <br>
+                  <strong>Audio:</strong> MP3, WAV, FLAC, OGG, M4A<br>
+                  <strong>Video:</strong> MP4, MOV, WebM, MPEG, AVI, MKV</small>
+                <div id="file-count" class="mt-2" style="display: none;">
+                    <span class="badge bg-primary"><span id="selected-files">0</span> Dateien ausgewählt</span>
+                </div>
+                <div class="info-message mt-2" style="background-color: #e7f3fe; border-left: 4px solid #2196F3; padding: 10px;">
+                    <i class="fas fa-info-circle"></i> Videodateien werden automatisch konvertiert, was je nach Größe länger dauern kann.
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label for="model">Whisper-Modell:</label>
+                <select id="model" name="model">
+                    {% for model in models %}
+                    <option value="{{ model }}" {% if model == default_model %}selected{% endif %}>{{ model }}</option>
+                    {% endfor %}
+                </select>
+                <small>Größere Modelle bieten bessere Genauigkeit, benötigen aber mehr Ressourcen.</small>
+            </div>
+            
+            <div class="form-group">
+                <label for="language">Sprache (optional):</label>
+                <input type="text" id="language" name="language" placeholder="z.B. de, en, fr (leer für automatische Erkennung)">
+                <small>Leer lassen für automatische Spracherkennung.</small>
+            </div>
+            
+            <div class="form-group">
+                <label for="output-format">Ausgabeformat:</label>
+                <select id="output-format" name="output_format">
+                    {% for format in output_formats %}
+                    <option value="{{ format }}">{{ format }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="output-path">Ausgabe-Verzeichnis (optional):</label>
+                <div class="input-group">
+                    <input type="text" id="output-path" name="output_path" placeholder="z.B. /pfad/zu/ausgabe/ (leer für Standardverzeichnis)">
+                    <button type="button" id="browse-button" class="btn btn-secondary">
+                        <i class="fas fa-folder-open"></i> Durchsuchen
+                    </button>
+                </div>
+                <small>Leer lassen für das Standard-Ausgabeverzeichnis: {{ default_output_dir }}</small>
+            </div>
+            
+            <!-- SRT-spezifische Einstellungen (anfangs versteckt) -->
+            <div id="srt-options" class="form-group" style="display: none;">
+                <h4>SRT-Einstellungen</h4>
+                
+                <div class="form-group">
+                    <label for="srt-max-duration">Maximale Segmentdauer: <span id="srt-max-duration-value">2</span> Sekunden</label>
+                    <input type="range" id="srt-max-duration" name="srt_max_duration" min="1" max="10" step="0.5" value="2" class="form-control">
+                    <small>Kurze Segmente (1-3 Sek.) sind besser lesbar, lange Segmente (5-10 Sek.) haben weniger Unterteilungen.</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="srt-max-chars">Maximale Zeichen pro Zeile: <span id="srt-max-chars-value">70</span></label>
+                    <input type="range" id="srt-max-chars" name="srt_max_chars" min="20" max="120" step="5" value="40" class="form-control">
+                    <small>Bereich: 20-120 Zeichen (empfohlen: 20-40 für kurze Segmente).</small>
+                </div>
+                <div class="form-group">
+                    <input type="checkbox" id="srt-linebreaks" name="srt_linebreaks" checked>
+                    <label for="srt-linebreaks">Zeilenumbruch für Untertitel aktivieren (Standard: 2-zeilig)</label>
+                </div>
+            </div>
+            
+            <button type="submit" class="button primary" id="transcribe-button">
+                <i class="fas fa-microphone"></i> Transkribieren
+            </button>
+        </form>
+    </div>
+    
+    <div class="result-container" id="result-container" style="display: none;">
+        <h3>Transkriptionsergebnis</h3>
+        <div class="progress-container" id="progress-container">
+            <div class="progress-bar" id="progress-bar"></div>
+        </div>
+        <div id="transcription-result"></div>
+        <button class="button" id="download-button" style="display: none;">
+            <i class="fas fa-download"></i> Herunterladen
+        </button>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('transcribe-form');
+    const audioFileInput = document.getElementById('audio-file');
+    const audioFileLabel = document.querySelector('label[for="audio-file"]');
+    const resultContainer = document.getElementById('result-container');
+    const languageInput = document.getElementById('language');
+
+    const progressContainer = document.getElementById('progress-container');
+    const progressBar = document.getElementById('progress-bar');
+    const transcriptionResult = document.getElementById('transcription-result');
+    const downloadButton = document.getElementById('download-button');
+    const outputFormatSelect = document.getElementById('output-format');
+    const srtOptionsContainer = document.getElementById('srt-options');
+    const srtMaxDurationSlider = document.getElementById('srt-max-duration');
+    const srtMaxDurationValue = document.getElementById('srt-max-duration-value');
+    const srtMaxCharsSlider = document.getElementById('srt-max-chars');
+    const srtMaxCharsValue = document.getElementById('srt-max-chars-value');
+    const browseButton = document.getElementById('browse-button');
+    const outputPathInput = document.getElementById('output-path');
+    
+    // Event-Listener für SRT-Schieberegler
+    srtMaxDurationSlider.addEventListener('input', function() {
+        srtMaxDurationValue.textContent = this.value;
+    });
+    
+    srtMaxCharsSlider.addEventListener('input', function() {
+        srtMaxCharsValue.textContent = this.value;
+    });
+
+    // SRT-Optionen anzeigen/verstecken je nach Ausgabeformat
+    outputFormatSelect.addEventListener('change', function() {
+        if (this.value.toLowerCase() === 'srt') {
+            srtOptionsContainer.style.display = 'block';
+        } else {
+            srtOptionsContainer.style.display = 'none';
+        }
+    });
+    
+    // Initial prüfen, ob SRT ausgewählt ist
+    if (outputFormatSelect.value.toLowerCase() === 'srt') {
+        srtOptionsContainer.style.display = 'block';
+    }
+
+    // Event-Listener für Dateiauswahl
+    const fileCountDisplay = document.getElementById('file-count');
+    const selectedFilesCount = document.getElementById('selected-files');
+    
+    audioFileInput.addEventListener('change', function() {
+        const files = this.files;
+        if (files.length > 0) {
+            fileCountDisplay.style.display = 'block';
+            selectedFilesCount.textContent = files.length;
+            
+            // Wenn mehrere Dateien ausgewählt wurden, aktiviere den Batch-Modus
+            if (files.length > 1) {
+                // Globale Variablen für Batch-Verarbeitung
+                window.batchMode = true;
+                window.totalFiles = files.length;
+                window.processedFiles = 0;
+                window.successCount = 0;
+                window.failedFiles = [];
+                window.results = [];
+            } else {
+                window.batchMode = false;
+            }
+        } else {
+            fileCountDisplay.style.display = 'none';
+            window.batchMode = false;
+        }
+    });
+    
+    // SRT-Sliders mit Live-Update
+    srtMaxDurationSlider.addEventListener('input', function() {
+        srtMaxDurationValue.textContent = this.value;
+    });
+    
+    srtMaxCharsSlider.addEventListener('input', function() {
+        srtMaxCharsValue.textContent = this.value;
+    });
+    
+    // Verbesserter Durchsuchen-Button mit Verzeichnisauswahl-Dialog
+    browseButton.addEventListener('click', function() {
+        // Erstelle ein Dialog-Element
+        const modal = document.createElement('div');
+        modal.style.position = 'fixed';
+        modal.style.top = '0';
+        modal.style.left = '0';
+        modal.style.width = '100%';
+        modal.style.height = '100%';
+        modal.style.backgroundColor = 'rgba(0,0,0,0.4)';
+        modal.style.zIndex = '1000';
+        modal.style.display = 'flex';
+        modal.style.justifyContent = 'center';
+        modal.style.alignItems = 'center';
+        
+        // Basis-Dialog erstellen
+        modal.innerHTML = `
+            <div style="background: white; padding: 20px; border-radius: 5px; max-width: 600px; width: 90%;">
+                <h3>Verzeichnis auswählen</h3>
+                <div id="directory-browser">
+                    <div id="current-path" style="margin-bottom: 10px; font-weight: bold;"></div>
+                    <div id="directory-list" style="max-height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 10px;">
+                        <p>Verzeichnisse werden geladen...</p>
+                    </div>
+                </div>
+                <div style="margin-top: 15px; display: flex; justify-content: space-between;">
+                    <button id="manual-input-btn" class="btn btn-secondary">Manuell eingeben</button>
+                    <div>
+                        <button id="cancel-browser" class="btn btn-secondary">Abbrechen</button>
+                        <button id="select-directory" class="btn btn-primary" disabled>Auswählen</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Füge Dialog zur Seite hinzu
+        document.body.appendChild(modal);
+        
+        // Referenzen auf Dialog-Elemente
+        const directoryList = document.getElementById('directory-list');
+        const currentPathElement = document.getElementById('current-path');
+        const selectDirectoryButton = document.getElementById('select-directory');
+        const cancelButton = document.getElementById('cancel-browser');
+        const manualInputButton = document.getElementById('manual-input-btn');
+        
+        // Variablen für das aktuelle Verzeichnis
+        let currentPath = null;
+        let selectedDirectory = null;
+        
+        // Funktion zum Laden der Verzeichnisse
+        function loadDirectories(path = null) {
+            directoryList.innerHTML = '<p>Verzeichnisse werden geladen...</p>';
+            selectDirectoryButton.disabled = true;
+            
+            // API-Aufruf zum Laden der Verzeichnisse
+            fetch(`/api/browse-directories${path ? `?path=${encodeURIComponent(path)}` : ''}`).then(response => {
+                if (!response.ok) {
+                    throw new Error('Fehler beim Laden der Verzeichnisse');
+                }
+                return response.json();
+            }).then(data => {
+                if (data.success) {
+                    currentPath = data.current_path;
+                    if (currentPath) {
+                        currentPathElement.textContent = `Aktuelles Verzeichnis: ${currentPath}`;
+                        selectedDirectory = currentPath;
+                        selectDirectoryButton.disabled = false;
+                    } else {
+                        currentPathElement.textContent = 'Wählen Sie ein Startverzeichnis:';
+                    }
+                    
+                    // Verzeichnisse anzeigen
+                    if (data.directories.length === 0) {
+                        directoryList.innerHTML = '<p>Keine Unterverzeichnisse gefunden.</p>';
+                    } else {
+                        directoryList.innerHTML = '';
+                        
+                        // Zurück-Link anzeigen, wenn wir in einem Unterverzeichnis sind
+                        if (currentPath) {
+                            const backItem = document.createElement('div');
+                            backItem.className = 'directory-item';
+                            backItem.style.padding = '8px';
+                            backItem.style.cursor = 'pointer';
+                            backItem.style.borderBottom = '1px solid #eee';
+                            backItem.innerHTML = '<i class="fas fa-arrow-up"></i> Eine Ebene nach oben';
+                            backItem.addEventListener('click', function() {
+                                const parentPath = currentPath.substring(0, currentPath.lastIndexOf('/'));
+                                loadDirectories(parentPath);
+                            });
+                            directoryList.appendChild(backItem);
+                        }
+                        
+                        // Verzeichnisse auflisten
+                        data.directories.forEach(dir => {
+                            const dirItem = document.createElement('div');
+                            dirItem.className = 'directory-item';
+                            dirItem.style.padding = '8px';
+                            dirItem.style.cursor = 'pointer';
+                            dirItem.style.borderBottom = '1px solid #eee';
+                            dirItem.innerHTML = `<i class="fas fa-folder"></i> ${dir.name}`;
+                            
+                            // Klick-Handler für Verzeichnis
+                            dirItem.addEventListener('click', function() {
+                                loadDirectories(dir.path);
+                            });
+                            
+                            directoryList.appendChild(dirItem);
+                        });
+                    }
+                } else {
+                    directoryList.innerHTML = `<p>Fehler: ${data.error || 'Unbekannter Fehler'}</p>`;
+                }
+            }).catch(error => {
+                directoryList.innerHTML = `<p>Fehler: ${error.message}</p>`;
+            });
+        }
+        
+        // Initialisierung: Lade Standardverzeichnisse
+        loadDirectories();
+        
+        // Event-Handler für Buttons
+        cancelButton.addEventListener('click', function() {
+            document.body.removeChild(modal);
+        });
+        
+        selectDirectoryButton.addEventListener('click', function() {
+            if (selectedDirectory) {
+                outputPathInput.value = selectedDirectory;
+                document.body.removeChild(modal);
+            }
+        });
+        
+        manualInputButton.addEventListener('click', function() {
+            // Wechsle zum manuellen Eingabe-Dialog
+            modal.innerHTML = `
+                <div style="background: white; padding: 20px; border-radius: 5px; max-width: 500px; width: 90%;">
+                    <h3>Verzeichnispfad manuell eingeben</h3>
+                    <p>Geben Sie den vollständigen Pfad zum gewünschten Verzeichnis ein:</p>
+                    <input type="text" id="manual-path" class="form-control" placeholder="/pfad/zum/verzeichnis" style="margin-bottom: 15px;">
+                    <div style="text-align: right;">
+                        <button id="back-to-browser" class="btn btn-secondary">Zurück</button>
+                        <button id="use-manual-path" class="btn btn-primary">Übernehmen</button>
+                    </div>
+                </div>
+            `;
+            
+            // Handler für die manuellen Eingabe-Buttons
+            document.getElementById('back-to-browser').addEventListener('click', function() {
+                document.body.removeChild(modal);
+                browseButton.click(); // Dialog neu öffnen
+            });
+            
+            document.getElementById('use-manual-path').addEventListener('click', function() {
+                const manualPath = document.getElementById('manual-path').value.trim();
+                if (manualPath) {
+                    outputPathInput.value = manualPath;
+                }
+                document.body.removeChild(modal);
+            });
+        });
+    });
+    
+    // Prüfe, ob Parameter in der URL übergeben wurden
+    const urlParams = new URLSearchParams(window.location.search);
+    const audioPath = urlParams.get('audio');
+    const systemAudioParam = urlParams.get('system_audio');
+    const sessionIdParam = urlParams.get('session_id');
+    const languageParam = urlParams.get('language');
+    
+    // Wenn ein Sprachparameter übergeben wurde, setze ihn im Formular
+    if (languageParam) {
+        const languageInput = document.getElementById('language');
+        languageInput.value = languageParam;
+    }
+    
+    if (audioPath) {
+        // Zeige die verwendete(n) Audiodatei(en) an
+        const fileInputContainer = audioFileInput.parentElement;
+        const audioInfo = document.createElement('div');
+        audioInfo.className = 'audio-info';
+        
+        // HTML-Inhalt basierend auf verfügbaren Parametern erstellen
+        let infoHTML = '<div class="info-message">';
+        
+        // Bestimme die Quelle (Telefon oder Videoextraktion)
+        const source = sessionIdParam ? 'Telefonaufnahme' : 'vorheriger Extraktion';
+        infoHTML += `<i class="fas fa-info-circle"></i> Audio aus ${source}:<br>`;
+        
+        // Haupt-Audiospur
+        infoHTML += `<strong>${audioPath}</strong>`;
+        
+        // System-Audio, falls vorhanden
+        if (systemAudioParam) {
+            infoHTML += `<br><i class="fas fa-volume-up"></i> System-Audio: <strong>${systemAudioParam}</strong>`;
+        }
+        
+        // Session-ID, falls vorhanden
+        if (sessionIdParam) {
+            infoHTML += `<br><small>Session ID: ${sessionIdParam}</small>`;
+        }
+        
+        infoHTML += '</div>';
+        audioInfo.innerHTML = infoHTML;
+        
+        // Füge die Audio-Info vor dem Dateiauswahl-Element ein
+        fileInputContainer.insertBefore(audioInfo, audioFileInput);
+        
+        // Datei-Counter aktualisieren
+        const fileCount = document.getElementById('file-count');
+        const selectedFiles = document.getElementById('selected-files');
+        if (fileCount && selectedFiles) {
+            fileCount.style.display = 'block';
+            selectedFiles.textContent = systemAudioParam ? '2' : '1'; 
+        }
+        
+        // Verstecke das Dateiauswahl-Element (es wird nicht benötigt)
+        audioFileInput.style.display = 'none';
+        audioFileLabel.style.display = 'none';
+        document.querySelector('small').style.display = 'none';
+        
+        // Füge ein verstecktes Feld hinzu, um den Audiodateipfad zu übergeben
+        const hiddenAudioPath = document.createElement('input');
+        hiddenAudioPath.type = 'hidden';
+        hiddenAudioPath.name = 'pre_extracted_audio';
+        hiddenAudioPath.value = audioPath;
+        form.appendChild(hiddenAudioPath);
+        
+        // Setze die Anforderung für das Dateiauswahl-Element zurück, da wir bereits eine Datei haben
+        audioFileInput.removeAttribute('required');
+    }
+    
+    // Funktion für die Batch-Verarbeitung mehrerer Dateien
+    function processBatchFiles() {
+        const files = audioFileInput.files;
+        
+        // UI aktualisieren für Batch-Verarbeitung
+        resultContainer.style.display = 'block';
+        progressContainer.style.display = 'block';
+        progressBar.style.width = '0%';
+        transcriptionResult.innerHTML = `
+            <div class="batch-processing">
+                <h4>Batch-Verarbeitung</h4>
+                <p><span id="batch-count">0/${window.totalFiles}</span> Dateien verarbeitet</p>
+                <div id="batch-results"></div>
+            </div>
+        `;
+        downloadButton.style.display = 'none';
+        
+        // Zugriff auf die Batch-Ergebniscontainer
+        const batchResultsContainer = document.getElementById('batch-results');
+        const batchCountDisplay = document.getElementById('batch-count');
+        
+        // Parameter für alle Dateien sammeln (außer der Datei selbst)
+        const commonParams = {
+            model: document.getElementById('model').value,
+            language: document.getElementById('language').value,
+            output_format: document.getElementById('output-format').value,
+            output_path: document.getElementById('output-path').value
+        };
+        
+        // Füge SRT-Parameter hinzu, wenn das Format SRT ist
+        if (commonParams.output_format.toLowerCase() === 'srt') {
+            const srtMaxCharsSlider = document.getElementById('srt-max-chars');
+            const srtMaxDurationSlider = document.getElementById('srt-max-duration');
+            commonParams.srt_max_chars = srtMaxCharsSlider.value;
+            commonParams.srt_max_duration = srtMaxDurationSlider.value;
+            commonParams.srt_linebreaks = document.getElementById('srt-linebreaks').checked ? 'true' : 'false';
+        }
+        
+        // Funktion zum sequentiellen Verarbeiten der Dateien
+        function processNextFile(index) {
+            if (index >= window.totalFiles) {
+                // Alle Dateien wurden verarbeitet
+                processingComplete();
+                return;
+            }
+            
+            const file = files[index];
+            const formData = new FormData();
+            
+            // Datei hinzufügen
+            formData.append('audio_file', file);
+            
+            // Gemeinsame Parameter hinzufügen
+            for (const [key, value] of Object.entries(commonParams)) {
+                if (value !== null && value !== '') {
+                    formData.append(key, value);
+                }
+            }
+            
+            // Fortschritt aktualisieren
+            progressBar.style.width = `${(index / window.totalFiles) * 100}%`;
+            
+            // Datei verarbeiten
+            fetch('/api/transcribe', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Netzwerkfehler: ' + response.status);
+                }
+                return response.json();
+            })
+            .then(data => {
+                window.processedFiles++;
+                batchCountDisplay.textContent = `${window.processedFiles}/${window.totalFiles}`;
+                
+                if (data.success) {
+                    window.successCount++;
+                    window.results.push({
+                        filename: file.name,
+                        outputFile: data.output_file,
+                        language: data.language,
+                        success: true
+                    });
+                } else {
+                    window.failedFiles.push(file.name);
+                    window.results.push({
+                        filename: file.name,
+                        error: data.error || 'Unbekannter Fehler',
+                        success: false
+                    });
+                }
+                
+                // Ergebnisliste aktualisieren
+                updateBatchResults();
+                
+                // Nächste Datei verarbeiten
+                processNextFile(index + 1);
+            })
+            .catch(error => {
+                window.processedFiles++;
+                batchCountDisplay.textContent = `${window.processedFiles}/${window.totalFiles}`;
+                window.failedFiles.push(file.name);
+                
+                window.results.push({
+                    filename: file.name,
+                    error: error.message,
+                    success: false
+                });
+                
+                // Ergebnisliste aktualisieren
+                updateBatchResults();
+                
+                // Nächste Datei verarbeiten
+                processNextFile(index + 1);
+            });
+        }
+        
+        // Funktion zum Aktualisieren der Ergebnisliste
+        function updateBatchResults() {
+            let resultHtml = '<div class="batch-results-list"><table class="table"><thead><tr><th>Datei</th><th>Status</th><th>Aktion</th></tr></thead><tbody>';
+            
+            window.results.forEach(result => {
+                resultHtml += `<tr><td>${result.filename}</td><td>${result.success ? '<span class="text-success">Erfolgreich</span>' : '<span class="text-danger">Fehler</span>'}</td><td>`;
+                
+                if (result.success && result.outputFile) {
+                    resultHtml += `<button class="btn btn-sm btn-primary" onclick="downloadFile('${result.outputFile}')">Download</button>`;
+                } else if (!result.success) {
+                    resultHtml += `<span class="text-danger">${result.error}</span>`;
+                }
+                
+                resultHtml += '</td></tr>';
+            });
+            
+            resultHtml += '</tbody></table></div>';
+            batchResultsContainer.innerHTML = resultHtml;
+        }
+        
+        // Abschlussfunktion, wenn alle Dateien verarbeitet wurden
+        function processingComplete() {
+            progressContainer.style.display = 'none';
+            
+            // Zusammenfassende Statistiken anzeigen
+            const summaryHtml = `
+                <div class="batch-summary">
+                    <h4>Batch-Verarbeitung abgeschlossen</h4>
+                    <p>
+                        <strong>${window.successCount}</strong> von <strong>${window.totalFiles}</strong> Dateien erfolgreich transkribiert.
+                        ${window.failedFiles.length > 0 ? `<strong>${window.failedFiles.length}</strong> fehlgeschlagen.` : ''}
+                    </p>
+                </div>
+            `;
+            
+            // Aktualisiere das oberste Element in der Batch-Verarbeitung
+            const batchProcessing = document.querySelector('.batch-processing');
+            batchProcessing.innerHTML = summaryHtml + batchProcessing.innerHTML.substring(batchProcessing.innerHTML.indexOf('<div id="batch-results">'));
+            
+            // Stelle sicher, dass die Ergebnisliste aktuell ist
+            updateBatchResults();
+        }
+        
+        // Starte die Verarbeitung mit der ersten Datei
+        processNextFile(0);
+    }
+    
+    // Definiere die downloadFile-Funktion im globalen Bereich für den Download-Button
+    window.downloadFile = function(filePath) {
+        if (filePath) {
+            const fileUrl = '/api/download?file=' + encodeURIComponent(filePath);
+            const filename = filePath.split('/').pop(); // Extrahiere den Dateinamen aus dem Pfad
+            
+            // Datei herunterladen
+            const a = document.createElement('a');
+            a.href = fileUrl;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+    };
+    
+    // Auto-Start der Transkription, wenn von Telefonseite gespeicherte Aufnahme vorliegt
+    const phoneSessionId = localStorage.getItem('phoneSessionId');
+    if (phoneSessionId) {
+        // Entferne gespeicherte Werte
+        localStorage.removeItem('phoneAudioFiles');
+        localStorage.removeItem('phoneSessionId');
+        // UI anpassen
+        document.getElementById('transcribe-form').style.display = 'none';
+        const resultContainer = document.getElementById('result-container');
+        const progressContainer = document.getElementById('progress-container');
+        const progressBar = document.getElementById('progress-bar');
+        const transcriptionResult = document.getElementById('transcription-result');
+        const downloadButton = document.getElementById('download-button');
+        resultContainer.style.display = 'block';
+        progressContainer.style.display = 'block';
+        // Fetch-Aufruf
+        fetch(`/api/phone/recording/${phoneSessionId}/process`, { method: 'POST' })
+            .then(res => res.json())
+            .then(data => {
+                progressContainer.style.display = 'none';
+                if (data.success) {
+                    transcriptionResult.innerHTML = `
+                        <div class="success-message">
+                            <i class="fas fa-check-circle"></i> Transkription abgeschlossen!
+                        </div>
+                        <div class="result-info">
+                            <p><strong>Ausgabedatei:</strong> ${data.output_file}</p>
+                        </div>`;
+                    downloadButton.style.display = 'inline-block';
+                    downloadButton.onclick = () => { window.location.href = `/download?file=${encodeURIComponent(data.output_file)}`; };
+                } else {
+                    transcriptionResult.innerHTML = `
+                        <div class="error-message">
+                            <i class="fas fa-exclamation-circle"></i> Fehler: ${data.error}
+                        </div>`;
+                }
+            });
+    }
+    
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        // Prüfen, ob wir im Batch-Modus sind
+        if (window.batchMode) {
+            processBatchFiles();
+            return;
+        }
+        
+        // Einzelne Datei verarbeiten (bestehender Code)
+        // Formular-Daten sammeln
+        const formData = new FormData(form);
+        
+        // WICHTIG: SRT-Zeilenumbruch explizit hinzufu00fcgen, um Checkbox-Status zu sichern
+        if (outputFormatSelect.value.toLowerCase() === 'srt') {
+            // U00dcberschreiben/Hinzufu00fcgen des srt_linebreaks Parameters, damit er garantiert u00fcbertragen wird
+            // Dies behebt das Problem mit der Checkbox, die sonst nicht korrekt gesendet wird
+            formData.set('srt_linebreaks', document.getElementById('srt-linebreaks').checked ? 'true' : 'false');
+            console.log('SRT Linebreaks:', document.getElementById('srt-linebreaks').checked);
+        }
+        
+        // UI aktualisieren
+        resultContainer.style.display = 'block';
+        progressContainer.style.display = 'block';
+        progressBar.style.width = '0%';
+        transcriptionResult.innerHTML = '<p>Transkription wird gestartet...</p>';
+        downloadButton.style.display = 'none';
+        
+        // Transkription starten
+        fetch('/api/transcribe', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Netzwerkfehler: ' + response.status);
+            }
+            return response.json();
+        })
+        .then(data => {
+            progressContainer.style.display = 'none';
+            
+            if (data.success) {
+                // Basisinhalt für erfolgreiche Transkription erstellen
+                let resultHtml = `
+                    <div class="success-message">
+                        <i class="fas fa-check-circle"></i> Transkription erfolgreich!
+                    </div>
+                    <div class="result-info">
+                        <p><strong>Modell:</strong> ${data.model}</p>
+                        <p><strong>Sprache:</strong> ${data.language || 'Automatisch erkannt'}</p>
+                        <p><strong>Ausgabedatei:</strong> ${data.output_file}</p>
+                    </div>
+                `;
+                
+                // SRT Format mit Zeitstempeln anzeigen
+                if (outputFormatSelect.value.toLowerCase() === 'srt') {
+                    resultHtml += `
+                        <div class="result-text srt-format">
+                            <h4>SRT-Untertitel mit Zeitstempeln:</h4>
+                            <pre class="srt-content">${data.text}</pre>
+                        </div>
+                    `;
+                    
+                    // CSS für SRT-Format
+                    const srtStyle = document.createElement('style');
+                    srtStyle.textContent = `
+                        .srt-format pre {
+                            background-color: #f8f9fa;
+                            border: 1px solid #dee2e6;
+                            border-radius: 4px;
+                            padding: 15px;
+                            max-height: 400px;
+                            overflow-y: auto;
+                        }
+                        .srt-content {
+                            line-height: 1.5;
+                            font-family: monospace;
+                        }
+                    `;
+                    document.head.appendChild(srtStyle);
+                } else {
+                    // Standard Textformat für andere Formate
+                    resultHtml += `
+                        <div class="result-text">
+                            <h4>Transkribierter Text:</h4>
+                            <pre>${data.text}</pre>
+                        </div>
+                    `;
+                }
+                
+                transcriptionResult.innerHTML = resultHtml;
+                
+                // Download-Button anzeigen
+                downloadButton.style.display = 'inline-block';
+                downloadButton.onclick = function() {
+                    // Datei direkt vom Server herunterladen
+                    if (data.output_file) {
+                        // Server-Pfad zu URL-Pfad umwandeln
+                        const fileUrl = '/api/download?file=' + encodeURIComponent(data.output_file);
+                        const filename = data.output_file.split('/').pop(); // Extrahiere den Dateinamen aus dem Pfad
+                        
+                        // Datei herunterladen
+                        const a = document.createElement('a');
+                        a.href = fileUrl;
+                        a.download = filename;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                    } else {
+                        // Fallback: Text als Datei herunterladen
+                        const blob = new Blob([data.text], {type: 'text/plain'});
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = 'transkription.' + document.getElementById('output-format').value;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                    }
+                };
+            } else {
+                transcriptionResult.innerHTML = `
+                    <div class="error-message">
+                        <i class="fas fa-exclamation-circle"></i> Fehler bei der Transkription
+                    </div>
+                    <p>${data.error || 'Unbekannter Fehler'}</p>
+                `;
+            }
+        })
+        .catch(error => {
+            progressContainer.style.display = 'none';
+            transcriptionResult.innerHTML = `
+                <div class="error-message">
+                    <i class="fas fa-exclamation-circle"></i> Fehler bei der Transkription
+                </div>
+                <p>${error.message}</p>
+            `;
+        });
+        
+        // Simulierter Fortschritt (da wir keinen echten Fortschritt vom Server bekommen)
+        let progress = 0;
+        const progressInterval = setInterval(() => {
+            progress += 1;
+            if (progress > 95) {
+                clearInterval(progressInterval);
+            } else {
+                progressBar.style.width = progress + '%';
+            }
+        }, 500);
+    });
+});
+</script>
+{% endblock %}

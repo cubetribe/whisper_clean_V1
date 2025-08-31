@@ -1,0 +1,472 @@
+/* 
+ * Main stylesheet for Whisper Transcription Tool
+ * A modern, clean design with Apple-like aesthetics
+ */
+
+:root {
+  --primary-color: #0071e3;
+  --primary-hover: #0077ed;
+  --secondary-color: #86868b;
+  --text-color: #1d1d1f;
+  --light-text: #86868b;
+  --background-color: #ffffff;
+  --light-background: #f5f5f7;
+  --border-color: #d2d2d7;
+  --success-color: #28cd41;
+  --error-color: #ff3b30;
+  --warning-color: #ff9500;
+  --info-color: #0071e3;
+  --shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --border-radius: 8px;
+  --transition: all 0.3s ease;
+}
+
+/* Base styles */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: var(--text-color);
+  background-color: var(--background-color);
+  line-height: 1.5;
+  font-size: 16px;
+}
+
+.container {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 600;
+  margin-bottom: 1rem;
+}
+
+h1 {
+  font-size: 2rem;
+}
+
+h2 {
+  font-size: 1.75rem;
+  margin-top: 2rem;
+}
+
+h3 {
+  font-size: 1.5rem;
+  margin-top: 1.5rem;
+}
+
+h4 {
+  font-size: 1.25rem;
+}
+
+p {
+  margin-bottom: 1rem;
+}
+
+a {
+  color: var(--primary-color);
+  text-decoration: none;
+  transition: var(--transition);
+}
+
+a:hover {
+  color: var(--primary-hover);
+}
+
+small {
+  font-size: 0.875rem;
+  color: var(--light-text);
+}
+
+/* Header and navigation */
+header {
+  background-color: var(--background-color);
+  box-shadow: 0 1px 0 var(--border-color);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+header .container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 20px;
+}
+
+header h1 {
+  font-size: 1.5rem;
+  margin-bottom: 0;
+}
+
+nav ul {
+  display: flex;
+  list-style: none;
+}
+
+nav li {
+  margin-left: 1.5rem;
+}
+
+nav a {
+  color: var(--text-color);
+  font-weight: 500;
+  padding: 0.5rem 0;
+  position: relative;
+}
+
+nav a:hover {
+  color: var(--primary-color);
+}
+
+nav a.active {
+  color: var(--primary-color);
+}
+
+nav a.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background-color: var(--primary-color);
+}
+
+/* Main content */
+main {
+  padding: 2rem 0 4rem;
+  min-height: calc(100vh - 180px);
+}
+
+/* Footer */
+footer {
+  background-color: var(--light-background);
+  padding: 2rem 0;
+  text-align: center;
+  color: var(--light-text);
+}
+
+/* Buttons */
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem 1.5rem;
+  background-color: var(--light-background);
+  color: var(--text-color);
+  border: none;
+  border-radius: var(--border-radius);
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition);
+  text-align: center;
+  font-size: 1rem;
+}
+
+.button:hover {
+  background-color: #e8e8ed;
+  color: var(--text-color);
+}
+
+.button.primary {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+.button.primary:hover {
+  background-color: var(--primary-hover);
+  color: white;
+}
+
+.button i {
+  margin-right: 0.5rem;
+}
+
+/* Forms */
+.form-group {
+  margin-bottom: 1.5rem;
+}
+
+label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+}
+
+input[type="text"],
+input[type="email"],
+input[type="password"],
+select,
+textarea {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  font-size: 1rem;
+  transition: var(--transition);
+}
+
+input[type="text"]:focus,
+input[type="email"]:focus,
+input[type="password"]:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--primary-color);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(0, 113, 227, 0.2);
+}
+
+input[type="file"] {
+  padding: 0.5rem 0;
+}
+
+/* Cards and sections */
+.feature-card {
+  background-color: var(--light-background);
+  border-radius: var(--border-radius);
+  padding: 2rem;
+  margin-bottom: 2rem;
+  box-shadow: var(--shadow);
+  transition: var(--transition);
+}
+
+.feature-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.feature-card i {
+  font-size: 2rem;
+  color: var(--primary-color);
+  margin-bottom: 1rem;
+}
+
+.feature-card h4 {
+  margin-bottom: 1rem;
+}
+
+.features {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 2rem;
+  margin: 2rem 0;
+}
+
+/* Upload containers */
+.upload-container {
+  background-color: var(--light-background);
+  border-radius: var(--border-radius);
+  padding: 2rem;
+  margin-bottom: 2rem;
+}
+
+/* Result containers */
+.result-container {
+  background-color: var(--light-background);
+  border-radius: var(--border-radius);
+  padding: 2rem;
+  margin-top: 2rem;
+}
+
+.success-message {
+  color: var(--success-color);
+  font-weight: 500;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+}
+
+.error-message {
+  color: var(--error-color);
+  font-weight: 500;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+}
+
+.success-message i,
+.error-message i {
+  margin-right: 0.5rem;
+  font-size: 1.25rem;
+}
+
+.result-info {
+  background-color: var(--background-color);
+  border-radius: var(--border-radius);
+  padding: 1rem;
+  margin-top: 1rem;
+}
+
+.result-text {
+  background-color: var(--background-color);
+  border-radius: var(--border-radius);
+  padding: 1rem;
+  margin-top: 1rem;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.result-text pre {
+  white-space: pre-wrap;
+  font-family: inherit;
+}
+
+/* Progress bar */
+.progress-container {
+  width: 100%;
+  height: 8px;
+  background-color: var(--border-color);
+  border-radius: 4px;
+  margin: 1rem 0;
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  background-color: var(--primary-color);
+  width: 0%;
+  transition: width 0.3s ease;
+}
+
+/* Action buttons */
+.action-buttons {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1.5rem;
+  flex-wrap: wrap;
+}
+
+/* Chatbot specific styles */
+.chatbot-container {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 2rem;
+  margin-bottom: 2rem;
+}
+
+.transcript-upload {
+  background-color: var(--light-background);
+  border-radius: var(--border-radius);
+  padding: 2rem;
+}
+
+.chat-interface {
+  background-color: var(--light-background);
+  border-radius: var(--border-radius);
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-messages {
+  flex-grow: 1;
+  overflow-y: auto;
+  max-height: 400px;
+  margin-bottom: 1rem;
+  padding: 1rem;
+  background-color: var(--background-color);
+  border-radius: var(--border-radius);
+}
+
+.message {
+  margin-bottom: 1rem;
+  display: flex;
+}
+
+.message.user {
+  justify-content: flex-end;
+}
+
+.message-content {
+  max-width: 80%;
+  padding: 0.75rem 1rem;
+  border-radius: var(--border-radius);
+}
+
+.message.system .message-content,
+.message.bot .message-content {
+  background-color: var(--light-background);
+}
+
+.message.user .message-content {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+.chat-input {
+  display: flex;
+}
+
+.chat-input form {
+  display: flex;
+  width: 100%;
+}
+
+.chat-input input {
+  flex-grow: 1;
+  margin-right: 0.5rem;
+}
+
+.transcript-preview {
+  background-color: var(--light-background);
+  border-radius: var(--border-radius);
+  padding: 2rem;
+  margin-top: 2rem;
+}
+
+.transcript-content {
+  background-color: var(--background-color);
+  border-radius: var(--border-radius);
+  padding: 1rem;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.transcript-content pre {
+  white-space: pre-wrap;
+  font-family: inherit;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  header .container {
+    flex-direction: column;
+    padding: 1rem;
+  }
+  
+  nav ul {
+    margin-top: 1rem;
+  }
+  
+  nav li {
+    margin-left: 1rem;
+    margin-right: 1rem;
+  }
+  
+  .features {
+    grid-template-columns: 1fr;
+  }
+  
+  .chatbot-container {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .button {
+    width: 100%;
+    margin-bottom: 0.5rem;
+  }
+  
+  .action-buttons {
+    flex-direction: column;
+  }
+}

@@ -1,0 +1,242 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card mb-4">
+    <div class="card-header bg-primary text-white">
+        <h3>Speicherübersicht</h3>
+    </div>
+    <div class="alert alert-info m-3">
+        <strong>Hinweis:</strong> Sie können unten die Speicherverwaltungseinstellungen anpassen, um zu kontrollieren, wie viel Speicherplatz für Transkriptionen verwendet werden darf.
+    </div>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card mb-3">
+                    <div class="card-header">Systemspeicher</div>
+                    <div class="card-body">
+                        <div class="progress mb-3" style="height: 25px;">
+                            <div class="progress-bar bg-{{ 'danger' if disk_stats.free_gb < disk_stats.min_required_gb else 'success' }}"
+                                role="progressbar"
+                                style="width: {{ disk_stats.percent_used }}%"
+                                aria-valuenow="{{ disk_stats.percent_used }}"
+                                aria-valuemin="0"
+                                aria-valuemax="100">
+                                {{ disk_stats.percent_used }}% belegt
+                            </div>
+                        </div>
+                        <ul class="list-group">
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                Gesamtspeicher
+                                <span class="badge bg-primary rounded-pill">{{ disk_stats.total_gb }} GB</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                Verwendeter Speicher
+                                <span class="badge bg-warning rounded-pill">{{ disk_stats.used_gb }} GB</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                Freier Speicher
+                                <span class="badge bg-{{ 'danger' if disk_stats.free_gb < disk_stats.min_required_gb else 'success' }} rounded-pill">{{ disk_stats.free_gb }} GB</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card mb-3">
+                    <div class="card-header">Temporäre Dateien</div>
+                    <div class="card-body">
+                        <p>Der temporäre Ordner belegt aktuell <strong>{{ disk_stats.temp_dir_gb }} GB</strong> an Speicherplatz.</p>
+                        <div class="alert alert-{{ 'danger' if disk_stats.status == 'warning' else 'info' }}" role="alert">
+                            {% if disk_stats.status == 'warning' %}
+                                <strong>Wenig freier Speicherplatz verfügbar!</strong> Sie sollten temporäre Dateien bereinigen, um Platz freizugeben.
+                            {% else %}
+                                Speicherplatz ist ausreichend vorhanden.
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header bg-primary text-white">
+        <h3>Speicherbereinigung</h3>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card mb-3">
+                    <div class="card-header">Standardbereinigung</div>
+                    <div class="card-body">
+                        <p>Bereinigt temporäre Dateien, die älter als der angegebene Zeitraum sind.</p>
+                        <div class="mb-3">
+                            <label for="cleanup-age" class="form-label">Alter der Dateien (in Stunden)</label>
+                            <input type="number" class="form-control" id="cleanup-age" value="24" min="1" max="720">
+                        </div>
+                        <button id="btn-standard-cleanup" class="btn btn-primary" data-action="standard">Bereinigung starten</button>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card mb-3">
+                    <div class="card-header">Notfallbereinigung</div>
+                    <div class="card-body">
+                        <p><strong>Achtung:</strong> Löscht ALLE temporären Audio- und Videodateien unabhängig vom Alter!</p>
+                        <div class="alert alert-warning" role="alert">
+                            Verwenden Sie diese Option nur bei kritischem Speichermangel.
+                        </div>
+                        <button id="btn-emergency-cleanup" class="btn btn-danger" data-action="emergency">Notfallbereinigung starten</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="row mt-3">
+            <div class="col">
+                <div id="cleanup-result" class="alert d-none" role="alert"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header bg-primary text-white">
+        <h3>Speicherverwaltungs-Einstellungen</h3>
+    </div>
+    <div class="card-body">
+        <form action="/api/disk/config" method="post" id="disk-config-form">
+            <div class="mb-3">
+                <label for="max_disk_usage_percent" class="form-label">Maximale Speichernutzung (%)</label>
+                <input type="number" class="form-control" id="max_disk_usage_percent" name="max_disk_usage_percent" value="{{ disk_config.max_disk_usage_percent }}" min="50" max="95" required>
+                <div class="form-text">Legt fest, wie viel Prozent des Gesamtspeichers maximal genutzt werden sollen.</div>
+            </div>
+            <div class="mb-3">
+                <label for="min_required_space_gb" class="form-label">Mindestens freier Speicherplatz (GB)</label>
+                <input type="number" class="form-control" id="min_required_space_gb" name="min_required_space_gb" value="{{ disk_config.min_required_space_gb }}" min="0.5" max="10" step="0.5" required>
+                <div class="form-text">Der Mindestplatz, der immer frei bleiben soll.</div>
+            </div>
+            <div class="mb-3">
+                <label for="batch_warning_threshold_gb" class="form-label">Erforderlicher Speicherplatz für Stapelverarbeitung (GB)</label>
+                <input type="number" class="form-control" id="batch_warning_threshold_gb" name="batch_warning_threshold_gb" value="{{ disk_config.batch_warning_threshold_gb }}" min="1" max="20" step="0.5" required>
+                <div class="form-text">Für die Stapelverarbeitung benötigter freier Speicherplatz.</div>
+            </div>
+            <div class="mb-3 form-check">
+                <input type="checkbox" class="form-check-input" id="enable_auto_cleanup" name="enable_auto_cleanup" {% if disk_config.enable_auto_cleanup %}checked{% endif %}>
+                <label class="form-check-label" for="enable_auto_cleanup">Automatische Bereinigung aktivieren</label>
+                <div class="form-text">Bei aktivierter Option werden alte temporäre Dateien automatisch gelöscht.</div>
+            </div>
+            <div class="mb-3">
+                <label for="cleanup_age_hours" class="form-label">Bereinigung temporärer Dateien nach (Stunden)</label>
+                <input type="number" class="form-control" id="cleanup_age_hours" name="cleanup_age_hours" value="{{ disk_config.cleanup_age_hours }}" min="1" max="168" required>
+                <div class="form-text">Temporäre Dateien werden nach dieser Zeit gelöscht.</div>
+            </div>
+            <button type="submit" class="btn btn-primary">Einstellungen speichern</button>
+        </form>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header bg-primary text-white">
+        <h3>WAV zu MP3 Konvertierung</h3>
+    </div>
+    <div class="card-body">
+        <p>Diese Funktion ermöglicht die Konvertierung von WAV-Dateien zu platzsparenden MP3-Dateien.</p>
+        <div class="alert alert-info" role="alert">
+            <strong>Hinweis:</strong> Die automatische Konvertierung beim Extrahieren von Audio aus Videos ist aktuell in Entwicklung.
+        </div>
+        <p>MP3-Dateien benötigen nur etwa 10% des Speicherplatzes von WAV-Dateien bei gleichbleibender Qualität für Transkriptionszwecke.</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Standard Cleanup Button
+        document.getElementById('btn-standard-cleanup').addEventListener('click', function() {
+            const ageHours = document.getElementById('cleanup-age').value;
+            performCleanup('standard', ageHours);
+        });
+
+        // Emergency Cleanup Button
+        document.getElementById('btn-emergency-cleanup').addEventListener('click', function() {
+            if (confirm('Sind Sie sicher? Diese Aktion löscht ALLE temporären Audio- und Videodateien!')) {
+                performCleanup('emergency');
+            }
+        });
+
+        // Function to perform cleanup
+        function performCleanup(type, ageHours = null) {
+            const resultDiv = document.getElementById('cleanup-result');
+            resultDiv.classList.remove('d-none', 'alert-success', 'alert-danger', 'alert-warning');
+            resultDiv.innerHTML = '<div class="d-flex align-items-center"><div class="spinner-border spinner-border-sm me-2" role="status"></div> Bereinigung läuft...</div>';
+            resultDiv.classList.add('alert-info');
+
+            let url = '';
+            let body = {};
+
+            if (type === 'standard') {
+                url = '/api/disk/cleanup';
+                body = { age_hours: parseInt(ageHours) };
+            } else if (type === 'emergency') {
+                url = '/api/disk/emergency-cleanup';
+            }
+
+            fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(body)
+            })
+            .then(response => response.json())
+            .then(data => {
+                resultDiv.classList.remove('alert-info');
+                if (data.status === 'success') {
+                    resultDiv.classList.add('alert-success');
+                    let message = data.message;
+                    
+                    // Add details about space gained if available
+                    if (data.space_freed_mb) {
+                        message += ` (${data.space_freed_mb} MB freigegebener Speicherplatz)`;
+                    }
+                    if (data.space_gained_gb) {
+                        message += ` (${data.space_gained_gb} GB freigegebener Speicherplatz)`;
+                    }
+                    resultDiv.innerHTML = message;
+                    
+                    // Reload page after 3 seconds to update statistics
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 3000);
+                } else if (data.status === 'warning') {
+                    resultDiv.classList.add('alert-warning');
+                    resultDiv.textContent = data.message;
+                } else {
+                    resultDiv.classList.add('alert-danger');
+                    resultDiv.textContent = 'Fehler: ' + (data.message || 'Unbekannter Fehler bei der Bereinigung');
+                }
+            })
+            .catch(error => {
+                resultDiv.classList.remove('alert-info');
+                resultDiv.classList.add('alert-danger');
+                resultDiv.textContent = 'Fehler bei der API-Anfrage: ' + error.message;
+            });
+        }
+
+        // Refresh disk status every minute
+        setInterval(() => {
+            fetch('/api/disk/status')
+            .then(response => response.json())
+            .then(data => {
+                // Update disk statistics without reloading the page
+                // This could be implemented to update the UI elements with new values
+            })
+            .catch(error => {
+                console.error('Fehler beim Aktualisieren der Speicherstatistiken:', error);
+            });
+        }, 60000); // 60000 ms = 1 minute
+    });
+</script>
+{% endblock %}

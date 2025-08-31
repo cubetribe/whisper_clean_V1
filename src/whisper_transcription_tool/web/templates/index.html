@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="welcome-section">
+    <h3>Willkommen beim Whisper Transcription Tool</h3>
+    <p>Dieses Tool ermöglicht die Transkription von Audio- und Videodateien mit Whisper.cpp auf Apple Silicon.</p>
+    
+    <div class="features">
+        <div class="feature-card">
+            <i class="fas fa-microphone"></i>
+            <h4>Audio-Transkription</h4>
+            <p>Transkribieren Sie Audiodateien mit dem leistungsstarken Whisper-Modell.</p>
+            <a href="/transcribe" class="button">Zur Transkription</a>
+        </div>
+        
+        <div class="feature-card">
+            <i class="fas fa-film"></i>
+            <h4>Video-Audioextraktion</h4>
+            <p>Extrahieren Sie Audio aus Videodateien für die Transkription.</p>
+            <a href="/extract" class="button">Zur Extraktion</a>
+        </div>
+        
+        <div class="feature-card">
+            <i class="fas fa-phone"></i>
+            <h4>Telefonaufnahmen</h4>
+            <p>Verarbeiten Sie Telefonaufnahmen mit zwei separaten Spuren.</p>
+            <a href="/phone" class="button">Zu Telefonaufnahmen</a>
+        </div>
+        
+        <div class="feature-card">
+            <i class="fas fa-robot"></i>
+            <h4>Chatbot-Analyse</h4>
+            <p>Analysieren Sie Transkripte mit einem intelligenten Chatbot.</p>
+            <a href="/chatbot" class="button">Zum Chatbot</a>
+        </div>
+    </div>
+</div>
+
+<div class="system-info">
+    <h3>Systemstatus</h3>
+    <div id="system-status">
+        <p>Lade Systemstatus...</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Systemstatus laden
+    fetch('/api/models')
+        .then(response => response.json())
+        .then(data => {
+            const statusDiv = document.getElementById('system-status');
+            if (data.success) {
+                let html = '<ul>';
+                html += `<li><strong>Verfügbare Modelle:</strong> ${Array.isArray(data.models) ? data.models.join(', ') : 'Keine Modelle verfügbar'}</li>`;
+                html += `<li><strong>Standard-Modell:</strong> large-v3-turbo</li>`;
+                html += '</ul>';
+                statusDiv.innerHTML = html;
+            } else {
+                statusDiv.innerHTML = `<p class="error">Fehler beim Laden des Systemstatus: ${data.error}</p>`;
+            }
+        })
+        .catch(error => {
+            const statusDiv = document.getElementById('system-status');
+            statusDiv.innerHTML = `<p class="error">Fehler beim Laden des Systemstatus: ${error.message}</p>`;
+        });
+});
+</script>
+{% endblock %}

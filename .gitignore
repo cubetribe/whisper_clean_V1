@@ -1,0 +1,81 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+venv_new/
+env/
+ENV/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Project specific
+transcriptions/
+!transcriptions/.gitkeep
+models/
+!models/.gitkeep
+recordings/
+!recordings/.gitkeep
+*.log
+*.tmp
+
+# Temporary files
+transcriptions/temp/
+*.wav
+*.mp3
+*.mp4
+*.mov
+*.avi
+
+# Backups
+Backups/
+*.backup
+*.bak
+
+# Dependencies
+deps/
+!deps/.gitkeep
+
+# Configuration (contains user-specific paths)
+.whisper_tool.json
+config.json
+config.yaml
+
+# Test files
+test_audio/
+test_video/

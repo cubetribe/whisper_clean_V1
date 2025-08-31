@@ -1,0 +1,316 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <div class="alert alert-info">
+        <p><i class="fas fa-info-circle"></i> Vergleichen Sie eine SRT-Datei mit der zugehörigen JSON-Kontrolldatei, um Abweichungen zu erkennen.</p>
+        <p>Die JSON-Kontrolldatei finden Sie im Unterordner "JSON-Exporter" im selben Verzeichnis wie Ihre SRT-Datei.</p>
+    </div>
+
+    <div class="panel">
+        <div class="upload-area">
+            <form id="compareForm" enctype="multipart/form-data">
+                <div class="form-group">
+                    <label for="srtFile"><i class="fas fa-file-alt"></i> SRT-Datei:</label>
+                    <input type="file" id="srtFile" name="srtFile" accept=".srt" required>
+                </div>
+                <div class="form-group">
+                    <label for="jsonFile"><i class="fas fa-file-code"></i> JSON-Kontrolldatei:</label>
+                    <input type="file" id="jsonFile" name="jsonFile" accept=".json" required>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary"><i class="fas fa-sync"></i> Jetzt vergleichen</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="results" class="results-panel" style="display: none;">
+        <div class="summary-panel">
+            <h3>Zusammenfassung</h3>
+            <div class="summary-stats">
+                <div class="stat-box ok"><span id="okCount">0</span> OK</div>
+                <div class="stat-box warning"><span id="warningCount">0</span> Warnungen</div>
+                <div class="stat-box error"><span id="errorCount">0</span> Fehler</div>
+            </div>
+            <div class="export-actions">
+                <button id="exportCsv" class="btn btn-secondary"><i class="fas fa-file-csv"></i> Als CSV exportieren</button>
+            </div>
+        </div>
+
+        <div class="table-container">
+            <table id="comparisonTable" class="comparison-table">
+                <thead>
+                    <tr>
+                        <th>Segment-Index</th>
+                        <th>Zeitabweichung (ms)</th>
+                        <th>Textähnlichkeit</th>
+                        <th>Status</th>
+                        <th>SRT-Text</th>
+                        <th>JSON-Text</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Hier werden die Vergleichsergebnisse dynamisch eingefügt -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="loadingIndicator" class="loading-indicator" style="display: none;">
+        <div class="spinner"></div>
+        <p>Vergleiche Dateien...</p>
+    </div>
+
+    <div id="errorMessage" class="error-message" style="display: none;">
+        <i class="fas fa-exclamation-triangle"></i>
+        <p id="errorText"></p>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const compareForm = document.getElementById('compareForm');
+    const resultsPanel = document.getElementById('results');
+    const loadingIndicator = document.getElementById('loadingIndicator');
+    const errorMessage = document.getElementById('errorMessage');
+    const errorText = document.getElementById('errorText');
+    const comparisonTable = document.getElementById('comparisonTable').querySelector('tbody');
+    const exportCsvButton = document.getElementById('exportCsv');
+    
+    // Statistik-Zähler
+    const okCount = document.getElementById('okCount');
+    const warningCount = document.getElementById('warningCount');
+    const errorCount = document.getElementById('errorCount');
+
+    // Formular-Submit-Handler
+    compareForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        // UI zurücksetzen
+        resultsPanel.style.display = 'none';
+        errorMessage.style.display = 'none';
+        loadingIndicator.style.display = 'block';
+        comparisonTable.innerHTML = '';
+        
+        // Formular-Daten vorbereiten
+        const formData = new FormData(compareForm);
+        
+        // API-Anfrage senden
+        fetch('/api/compare-transcripts', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Fehler beim Vergleich der Dateien');
+            }
+            return response.json();
+        })
+        .then(data => {
+            loadingIndicator.style.display = 'none';
+            
+            // Zähler zurücksetzen
+            let countOk = 0;
+            let countWarning = 0;
+            let countError = 0;
+            
+            // Ergebnistabelle füllen
+            data.segments.forEach(segment => {
+                const row = document.createElement('tr');
+                
+                // Segment-Status ermitteln
+                let statusClass = '';
+                if (segment.status === 'OK') {
+                    statusClass = 'status-ok';
+                    countOk++;
+                } else if (segment.status === 'Warnung') {
+                    statusClass = 'status-warning';
+                    countWarning++;
+                } else if (segment.status === 'Fehler') {
+                    statusClass = 'status-error';
+                    countError++;
+                }
+                
+                row.classList.add(statusClass);
+                
+                // Zellen hinzufügen
+                row.innerHTML = `
+                    <td>${segment.index}</td>
+                    <td>${segment.time_diff_ms}</td>
+                    <td>${segment.text_similarity.toFixed(2)}</td>
+                    <td class="status ${statusClass}">${segment.status}</td>
+                    <td>${segment.srt_text}</td>
+                    <td>${segment.json_text}</td>
+                `;
+                
+                comparisonTable.appendChild(row);
+            });
+            
+            // Statistik aktualisieren
+            okCount.textContent = countOk;
+            warningCount.textContent = countWarning;
+            errorCount.textContent = countError;
+            
+            // Ergebnisbereich anzeigen
+            resultsPanel.style.display = 'block';
+        })
+        .catch(error => {
+            loadingIndicator.style.display = 'none';
+            errorText.textContent = error.message;
+            errorMessage.style.display = 'block';
+            console.error('Fehler:', error);
+        });
+    });
+    
+    // CSV-Export-Handler
+    exportCsvButton.addEventListener('click', function() {
+        // Tabellenzeilen auslesen
+        const rows = Array.from(comparisonTable.querySelectorAll('tr'));
+        
+        // CSV-Header
+        let csvContent = 'Segment-Index,Zeitabweichung (ms),Textähnlichkeit,Status,SRT-Text,JSON-Text\n';
+        
+        // Daten für jede Zeile formatieren
+        rows.forEach(row => {
+            const cells = Array.from(row.querySelectorAll('td'));
+            const rowData = cells.map(cell => `"${cell.textContent.replace(/"/g, '""')}"`);
+            csvContent += rowData.join(',') + '\n';
+        });
+        
+        // Download-Link erstellen und klicken
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.setAttribute('href', url);
+        link.setAttribute('download', 'transkript_vergleich.csv');
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    });
+});
+</script>
+
+<style>
+.summary-panel {
+    margin-bottom: 1.5rem;
+    padding: 1rem;
+    background-color: #f8f9fa;
+    border-radius: 5px;
+}
+
+.summary-stats {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.stat-box {
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    font-weight: bold;
+}
+
+.stat-box.ok {
+    background-color: #d4edda;
+    color: #155724;
+}
+
+.stat-box.warning {
+    background-color: #fff3cd;
+    color: #856404;
+}
+
+.stat-box.error {
+    background-color: #f8d7da;
+    color: #721c24;
+}
+
+.comparison-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1.5rem;
+}
+
+.comparison-table th,
+.comparison-table td {
+    padding: 0.75rem;
+    border: 1px solid #dee2e6;
+    text-align: left;
+}
+
+.comparison-table th {
+    background-color: #f8f9fa;
+    font-weight: bold;
+}
+
+.comparison-table .status-ok {
+    background-color: rgba(212, 237, 218, 0.3);
+}
+
+.comparison-table .status-warning {
+    background-color: rgba(255, 243, 205, 0.3);
+}
+
+.comparison-table .status-error {
+    background-color: rgba(248, 215, 218, 0.3);
+}
+
+.comparison-table .status {
+    font-weight: bold;
+}
+
+.comparison-table .status.status-ok {
+    color: #155724;
+}
+
+.comparison-table .status.status-warning {
+    color: #856404;
+}
+
+.comparison-table .status.status-error {
+    color: #721c24;
+}
+
+.loading-indicator {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+}
+
+.spinner {
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #3498db;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    animation: spin 2s linear infinite;
+    margin-bottom: 1rem;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.error-message {
+    padding: 1rem;
+    background-color: #f8d7da;
+    color: #721c24;
+    border-radius: 5px;
+    margin-bottom: 1.5rem;
+    display: flex;
+    align-items: center;
+}
+
+.error-message i {
+    margin-right: 0.5rem;
+    font-size: 1.25rem;
+}
+</style>
+{% endblock %}

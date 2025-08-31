@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="extract-section">
+    <div class="upload-container">
+        <form id="extract-form" enctype="multipart/form-data">
+            <div class="form-group">
+                <label for="video-file">Videodatei auswählen:</label>
+                <input type="file" id="video-file" name="video_file" accept="video/*" required>
+                <small>Unterstützte Formate: MP4, MOV, AVI, MKV, WebM</small>
+            </div>
+            
+            <button type="submit" class="button primary" id="extract-button">
+                <i class="fas fa-film"></i> Audio extrahieren
+            </button>
+        </form>
+    </div>
+    
+    <div class="result-container" id="result-container" style="display: none;">
+        <h3>Extraktionsergebnis</h3>
+        <div class="progress-container" id="progress-container">
+            <div class="progress-bar" id="progress-bar"></div>
+        </div>
+        <div id="extraction-result"></div>
+        <div class="action-buttons" id="action-buttons" style="display: none;">
+            <button class="button" id="transcribe-button">
+                <i class="fas fa-microphone"></i> Jetzt transkribieren
+            </button>
+            <button class="button" id="download-button">
+                <i class="fas fa-download"></i> Audio herunterladen
+            </button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('extract-form');
+    const resultContainer = document.getElementById('result-container');
+    const progressContainer = document.getElementById('progress-container');
+    const progressBar = document.getElementById('progress-bar');
+    const extractionResult = document.getElementById('extraction-result');
+    const actionButtons = document.getElementById('action-buttons');
+    const transcribeButton = document.getElementById('transcribe-button');
+    const downloadButton = document.getElementById('download-button');
+    
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        // Formular-Daten sammeln
+        const formData = new FormData(form);
+        
+        // UI aktualisieren
+        resultContainer.style.display = 'block';
+        progressContainer.style.display = 'block';
+        progressBar.style.width = '0%';
+        extractionResult.innerHTML = '<p>Audioextraktion wird gestartet...</p>';
+        actionButtons.style.display = 'none';
+        
+        // Extraktion starten
+        fetch('/api/extract', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Netzwerkfehler: ' + response.status);
+            }
+            return response.json();
+        })
+        .then(data => {
+            progressContainer.style.display = 'none';
+            
+            if (data.success) {
+                extractionResult.innerHTML = `
+                    <div class="success-message">
+                        <i class="fas fa-check-circle"></i> Audioextraktion erfolgreich!
+                    </div>
+                    <div class="result-info">
+                        <p><strong>Videodatei:</strong> ${data.video_path}</p>
+                        <p><strong>Extrahierte Audiodatei:</strong> ${data.audio_path}</p>
+                    </div>
+                `;
+                
+                // Aktionsbuttons anzeigen
+                actionButtons.style.display = 'flex';
+                
+                // Transkriptionsbutton konfigurieren
+                transcribeButton.onclick = function() {
+                    // Standardmäßig deutsche Sprache (de) als Parameter mitgeben, da die meisten Inhalte Deutsch sind
+                    window.location.href = '/transcribe?audio=' + encodeURIComponent(data.audio_path) + '&language=de';
+                };
+                
+                // Download-Button konfigurieren (vereinfachte Version, da direkter Download vom Server nicht möglich ist)
+                downloadButton.onclick = function() {
+                    alert('Die Audiodatei wurde auf dem Server unter ' + data.audio_path + ' gespeichert.');
+                };
+            } else {
+                extractionResult.innerHTML = `
+                    <div class="error-message">
+                        <i class="fas fa-exclamation-circle"></i> Fehler bei der Audioextraktion
+                    </div>
+                    <p>${data.error || 'Unbekannter Fehler'}</p>
+                `;
+            }
+        })
+        .catch(error => {
+            progressContainer.style.display = 'none';
+            extractionResult.innerHTML = `
+                <div class="error-message">
+                    <i class="fas fa-exclamation-circle"></i> Fehler bei der Audioextraktion
+                </div>
+                <p>${error.message}</p>
+            `;
+        });
+        
+        // Simulierter Fortschritt (da wir keinen echten Fortschritt vom Server bekommen)
+        let progress = 0;
+        const progressInterval = setInterval(() => {
+            progress += 2;
+            if (progress > 95) {
+                clearInterval(progressInterval);
+            } else {
+                progressBar.style.width = progress + '%';
+            }
+        }, 300);
+    });
+});
+</script>
+{% endblock %}
