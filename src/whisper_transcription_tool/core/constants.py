@@ -24,4 +24,4 @@ CONFIG_FILENAME = ".whisper_tool.json"
 LOG_FILENAME = "whisper_tool.log"
 
 # Version des Tools
-VERSION = "0.9.2"
+VERSION = "0.9.3"

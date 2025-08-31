@@ -67,6 +67,14 @@ DEFAULT_CONFIG = {
         "cleanup_age_hours": 24,         # Dateien älter als 24 Stunden bereinigen
         "batch_warning_threshold_gb": 5.0 # Mindestens 5 GB für Stapelverarbeitung
     },
+    "cleanup": {
+        "enabled": True,
+        "auto_cleanup_after_transcription": True,  # Automatisch nach Transkription aufräumen
+        "cleanup_age_hours": 24,  # Dateien älter als 24 Stunden löschen
+        "keep_transcriptions": True,  # Transkriptions-Dateien behalten (.txt, .srt, etc.)
+        "cleanup_chunks": True,  # Chunk-Verzeichnisse löschen
+        "max_temp_size_gb": 5.0  # Maximale Temp-Verzeichnisgröße bevor automatisches Cleanup
+    },
 }
 
 

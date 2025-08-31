@@ -72,6 +72,7 @@ from ..core.utils import ensure_directory_exists
 from ..core.constants import WHISPER_CPP_MODELS_URL
 from ..core.exceptions import DependencyError, ModelError
 from ..core.audio_chunker import AudioChunker, is_audio_chunkable
+from ..core.cleanup_manager import cleanup_after_transcription
 
 from ..core.logging_setup import get_logger
 from ..core.models import OutputFormat, TranscriptionRequest, TranscriptionResult, WhisperModel
@@ -85,6 +86,41 @@ logger = get_logger(__name__)
 WHISPER_CPP_REPO = "https://github.com/ggerganov/whisper.cpp"
 WHISPER_CPP_MODELS_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main"
 DEFAULT_MODEL = WhisperModel.LARGE_V3_TURBO  # Using large-v3-turbo as specified by user
+
+# Global variables to track current transcription process and cancellation
+current_transcription_process = None
+cancellation_requested = False
+
+def cancel_current_transcription():
+    """Cancel the currently running transcription process."""
+    global current_transcription_process, cancellation_requested
+    
+    # Set cancellation flag
+    cancellation_requested = True
+    logger.info(f"Cancel requested, current process: {current_transcription_process}")
+    
+    # Cancel active process if exists
+    if current_transcription_process and current_transcription_process.poll() is None:
+        logger.info(f"Cancelling current transcription process PID: {current_transcription_process.pid}")
+        current_transcription_process.terminate()
+        try:
+            current_transcription_process.wait(timeout=5)
+            logger.info("Process terminated successfully")
+        except subprocess.TimeoutExpired:
+            logger.warning("Process didn't terminate, killing it")
+            current_transcription_process.kill()
+            current_transcription_process.wait()
+        current_transcription_process = None
+        
+        # Send cancel event
+        publish(EventType.CUSTOM, {
+            "type": "TRANSCRIPTION_CANCELLED",
+            "message": "Transkription wurde abgebrochen"
+        })
+        return True
+    else:
+        logger.warning("No active transcription process to cancel")
+    return cancellation_requested
 
 # Modellgrößen in MB und geschätzter RAM-Bedarf in MB
 # Diese Werte sind Schätzungen und können je nach System variieren
@@ -362,10 +398,43 @@ def transcribe_audio(
         logger.error(error_msg)
         return TranscriptionResult(success=False, error=error_msg)
     
+    # Generate transcription ID for tracking
+    import uuid
+    transcription_id = str(uuid.uuid4())[:8]
+    
+    # Sende initiale Status-Nachricht
+    publish(EventType.PROGRESS_UPDATE, {
+        'task': 'transcription',
+        'status': 'Bereite Transkription vor...',
+        'user_id': transcription_id
+    })
+    
     # Check if file should be chunked for processing
     chunking_enabled = config.get("chunking", {}).get("enabled", True)
+    
+    # Analysiere Audio-Datei
+    publish(EventType.PROGRESS_UPDATE, {
+        'task': 'transcription',
+        'status': 'Analysiere Audio-Datei...',
+        'user_id': transcription_id
+    })
+    
     if chunking_enabled and is_audio_chunkable(audio_path, config):
         logger.info(f"Audio file is large, will process in chunks")
+        
+        # Get audio duration for status message
+        from ..core.audio_chunker import AudioChunker
+        chunker = AudioChunker(config)
+        duration_seconds = chunker.get_audio_duration(audio_path)
+        duration_minutes = duration_seconds / 60
+        num_chunks = int(duration_minutes / 20) + 1
+        
+        publish(EventType.PROGRESS_UPDATE, {
+            'task': 'transcription',
+            'status': f'Audio-Datei ist {duration_minutes:.1f} Minuten lang. Teile in {num_chunks} Segmente auf...',
+            'user_id': transcription_id
+        })
+        
         return transcribe_audio_chunked(
             audio_path=audio_path,
             output_format=output_format,
@@ -400,6 +469,20 @@ def transcribe_audio(
         "language": language,
         "output_format": output_format.value,
         "output_path": output_path
+    })
+    
+    # Status update für normale Transkription
+    publish(EventType.PROGRESS_UPDATE, {
+        'task': 'transcription',
+        'status': f'Starte Transkription mit Modell {model.value}...',
+        'user_id': transcription_id
+    })
+    
+    publish(EventType.PROGRESS_UPDATE, {
+        "task": "transcription",
+        "status": f"Transkription mit Modell {model.value} wird gestartet...",
+        "progress": 5,
+        "user_id": transcription_id
     })
     
     try:
@@ -516,6 +599,13 @@ def transcribe_audio(
             logger.info(f"Running command: {' '.join(cmd)}")
             logger.info(f"Working in directory: {temp_dir}, checking existence: {os.path.exists(temp_dir)}")
             
+            # Status update
+            publish(EventType.PROGRESS_UPDATE, {
+                "task": "transcription",
+                "status": "Whisper-Modell wird geladen und Transkription läuft...",
+                "progress": 20
+            })
+            
             # Prozess starten mit Pipes, um Ausgabe in Echtzeit zu lesen
             process = subprocess.Popen(
                 cmd, 
@@ -525,6 +615,10 @@ def transcribe_audio(
                 bufsize=1,  # Line-buffered
                 cwd=temp_dir
             )
+            
+            # Prozess global speichern für Abbruch
+            global current_transcription_process
+            current_transcription_process = process
             
             # UUID fu00fcr diese Transkription generieren
             import uuid
@@ -663,6 +757,13 @@ def transcribe_audio(
                 "language": language
             })
             
+            # Clean up audio file after successful transcription
+            try:
+                cleanup_after_transcription(audio_path, config)
+                logger.info(f"Cleaned up audio file: {audio_path}")
+            except Exception as e:
+                logger.warning(f"Failed to cleanup audio file: {e}")
+            
             # Return result
             return TranscriptionResult(
                 success=True,
@@ -724,16 +825,53 @@ def transcribe_audio_chunked(
     audio_path = str(audio_path)
     chunker = AudioChunker(config)
     
+    # Generate transcription ID for tracking
+    import uuid
+    transcription_id = str(uuid.uuid4())[:8]
+    
     try:
         # Split audio into chunks
         logger.info(f"Splitting large audio file into chunks...")
+        
+        # Get audio duration for status message
+        duration_seconds = chunker.get_audio_duration(audio_path)
+        duration_minutes = duration_seconds / 60
+        num_expected_chunks = int(duration_minutes / 20) + 1
+        
+        publish(EventType.PROGRESS_UPDATE, {
+            'task': 'transcription',
+            'status': f'Audio-Datei ist {duration_minutes:.1f} Minuten lang. Erstelle {num_expected_chunks} Segmente...',
+            'user_id': transcription_id
+        })
+        
+        publish(EventType.PROGRESS_UPDATE, {
+            "task": "chunking",
+            "status": "Audio-Datei wird in Chunks aufgeteilt...",
+            "progress": 0,
+            "user_id": transcription_id
+        })
         publish(EventType.CUSTOM, {
             "type": "CHUNKING_STARTED",
-            "audio_path": audio_path
+            "audio_path": audio_path,
+            "user_id": transcription_id
         })
         
         chunks = chunker.split_audio(audio_path)
         logger.info(f"Created {len(chunks)} chunks for processing")
+        
+        publish(EventType.PROGRESS_UPDATE, {
+            'task': 'transcription',
+            'status': f'{len(chunks)} Segmente erstellt. Starte Transkription...',
+            'user_id': transcription_id
+        })
+        
+        publish(EventType.PROGRESS_UPDATE, {
+            "task": "chunking",
+            "status": f"{len(chunks)} Chunks erfolgreich erstellt",
+            "chunks": len(chunks),
+            "progress": 100,
+            "user_id": transcription_id
+        })
         
         # Transcribe each chunk
         chunk_transcriptions = []
@@ -743,11 +881,36 @@ def transcribe_audio_chunked(
             chunk_num = i + 1
             logger.info(f"Processing chunk {chunk_num}/{len(chunks)}: {chunk_info['filename']}")
             
+            # Status für Modell-Laden
+            publish(EventType.PROGRESS_UPDATE, {
+                'task': 'transcription',
+                'status': f'Lade Modell {model.value} für Segment {chunk_num}/{len(chunks)}...',
+                'user_id': transcription_id
+            })
+            
+            # Detaillierte Progress-Updates für Chunks
+            publish(EventType.PROGRESS_UPDATE, {
+                "task": "transcription",
+                "chunk_index": i,
+                "total_chunks": len(chunks),
+                "status": f"Transkribiere Segment {chunk_num} von {len(chunks)}...",
+                "chunk_filename": chunk_info['filename'],
+                "progress": (i / len(chunks)) * 100,
+                "user_id": transcription_id
+            })
+            
+            publish(EventType.PROGRESS_UPDATE, {
+                'task': 'transcription',
+                'status': f'Transkription läuft für Segment {chunk_num}/{len(chunks)} (ca. 20 Minuten Audio)...',
+                'user_id': transcription_id
+            })
+            
             publish(EventType.CUSTOM, {
                 "type": "CHUNK_STARTED",
                 "chunk": chunk_num,
                 "total": len(chunks),
-                "filename": chunk_info['filename']
+                "filename": chunk_info['filename'],
+                "user_id": transcription_id
             })
             
             # Transcribe chunk (recursive call without chunking)
@@ -849,16 +1012,21 @@ def transcribe_audio_chunked(
             "text": merged_text
         })
         
+        # Clean up audio file and chunks after successful transcription
+        try:
+            config = load_config()
+            cleanup_after_transcription(audio_path, config)
+            logger.info(f"Cleaned up audio file and chunks: {audio_path}")
+        except Exception as e:
+            logger.warning(f"Failed to cleanup audio file: {e}")
+        
         return TranscriptionResult(
             success=True,
             text=merged_text,
             output_file=output_path,
             segments=all_segments,
-            metadata={
-                "chunks": len(chunks),
-                "model": model.value,
-                "language": language
-            }
+            model=model.value,
+            language=language
         )
         
     except Exception as e:

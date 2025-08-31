@@ -775,28 +775,7 @@ async def set_model_directory_api(payload: SetDirectoryPayload):
 
 
 # --- WebSocket Endpoint for Model Download Progress Updates ---
-@app.websocket("/ws/progress")
-async def websocket_progress_endpoint(websocket: WebSocket):
-    """WebSocket endpoint to broadcast model download progress.
-    Clients connect here to receive updates published by the download task.
-    """
-    await websocket.accept()
-    progress_websockets.add(websocket)
-    logger.info(f"Progress WebSocket client connected: {websocket.client}")
-    try:
-        while True:
-            # Keep the connection alive, wait for messages (e.g., ping)
-            # or just handle disconnection.
-            data = await websocket.receive_text() # Or receive_bytes
-            logger.debug(f"Received message from progress client {websocket.client}: {data}")
-            # Optional: Handle ping/pong or other client messages if needed
-    except WebSocketDisconnect:
-        logger.info(f"Progress WebSocket client disconnected: {websocket.client}")
-    except Exception as e:
-        logger.error(f"Error in progress WebSocket connection {websocket.client}: {e}")
-    finally:
-        # Ensure the websocket is removed from the set upon disconnection or error
-        progress_websockets.discard(websocket)
+# REMOVED: Duplicate WebSocket endpoint - using the one at line 132 instead
 
 
 # --- API Endpoints for Disk Management ---

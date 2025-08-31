@@ -1,6 +1,11 @@
-# Whisper Transcription Tool v0.9.2
+# Whisper Transcription Tool v0.9.3
 
 Ein modulares Python-Tool zur Transkription und Auswertung von Audio- und Videodaten mit Whisper.cpp, vollständig portabel und plattformunabhängig mit automatischer Audioextraktion.
+
+## 🎯 Neue Features in v0.9.3
+- **Automatische Cleanup-Funktion**: Temp-Verzeichnis wird nach erfolgreicher Transkription automatisch bereinigt
+- **Bugfixes**: WebSocket-Konflikte und Event-System-Probleme behoben
+- **Verbesserte Stabilität**: Rückkehr zur bewährten async Event-Handler Implementierung
 
 ## 🚀 Schnellstart
 
@@ -65,11 +70,30 @@ Vollständige Dokumentation in `documentation/`:
 - ✅ **Batch-Verarbeitung** für mehrere Dateien
 - ✅ **Mehrere Ausgabeformate** (TXT, SRT, VTT)
 
+## 🔧 Troubleshooting & Bekannte Probleme
+
+### WebSocket Progress Updates
+**Problem**: Fortschrittsbalken wird nicht angezeigt  
+**Lösung**: Server neu starten, Browser-Cache leeren
+
+### Cancel-Funktion
+**Problem**: Abbruch-Button reagiert nicht sofort  
+**Temporäre Lösung**: Server-Neustart bei hängenden Prozessen
+
+### Technische Details für Entwickler
+Die WebSocket-Implementierung nutzt async Event-Handler. Bei Problemen:
+1. Prüfen ob nur ein `/ws/progress` Endpoint existiert
+2. Sicherstellen dass `progress_event_handler` async ist
+3. Keine sync/async Bridge-Worker verwenden
+
+Details siehe [CHANGELOG.md](CHANGELOG.md)
+
 ## 📞 Support
 
 - GitHub Issues: [whisper_clean_V1](https://github.com/cubetribe/whisper_clean_V1)
 - Dokumentation: `documentation/` Verzeichnis
+- Changelog: [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
-**Version:** 0.9.2 | **Status:** Production Ready ✅
+**Version:** 0.9.3 | **Status:** Production Ready ✅
